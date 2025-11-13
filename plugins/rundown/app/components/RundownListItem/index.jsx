@@ -19,8 +19,8 @@ const INDICATE_PLAYING_TIMEOUT_MS = 100
 /**
  * Get the closest ancestor element
  * matching the specified CSS selector
- * @param { HTMLElement } el 
- * @param { String } selector 
+ * @param { HTMLElement } el
+ * @param { String } selector
  * @returns { HTMLElement | undefined }
  */
 function getClosestAncestorWithSelector (el, selector) {
@@ -145,6 +145,14 @@ export function RundownListItem ({
     bridge.commands.executeCommand('rundown.pasteItems', items, rundownId, index + 1)
   }
 
+  async function handlePlay () {
+    await selection.playSelection()
+  }
+
+  async function handleStop () {
+    await selection.stopSelection()
+  }
+
   const multipleItemsSelected = React.useMemo(() => {
     return (state?._connections?.[bridge.client.getIdentity()]?.selection || []).length > 1
   }, [state])
@@ -162,7 +170,7 @@ export function RundownListItem ({
       onDrop={e => handleDrop(e)}
       onDragOver={e => handleDragOver(e)}
       onDragLeave={e => handleDragLeave(e)}
-      onDragStart={e => handleDragStart(e)} 
+      onDragStart={e => handleDragStart(e)}
       onMouseDown={e => onMouseDown(e)}
       onContextMenu={e => handleContextMenu(e)}
       /*
@@ -182,6 +190,9 @@ export function RundownListItem ({
         contextPos &&
         (
           <ContextMenu x={contextPos[0]} y={contextPos[1]} onClose={() => setContextPos(undefined)}>
+            <ContextMenuItem text='Play' onClick={() => handlePlay()} />
+            <ContextMenuItem text='Stop' onClick={() => handleStop()} />
+            <ContextMenuDivider />
             <ContextMenuItem text='Copy' onClick={() => handleCopy()} />
             {
               !multipleItemsSelected &&

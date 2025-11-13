@@ -412,4 +412,112 @@ exports.activate = async () => {
     bridge.events.emit('item.change', itemId)
   }
   bridge.commands.registerCommand('rundown.appendItem', appendItem)
+
+  /**
+   * Export all items from a rundown
+   * as a JSON string
+   *
+   * @param { String } rundownId The id of the rundown to export
+   * @returns { Promise.<String> } A JSON string representation of all items
+   */
+  async function exportRundown (rundownId) {
+    if (!rundownId) {
+      throw new Error('Rundown ID is required')
+    }
+
+    // Check if rundown exists by trying to get its items
+    // This will return an empty array if the rundown doesn't exist,
+    // which is fine for export purposes
+    const itemIds = await getItems(rundownId)
+
+    if (itemIds.length === 0) {
+      return JSON.stringify([])
+    }
+
+    try {
+      return await copyItems(itemIds)
+    } catch (error) {
+      throw new Error('Failed to serialize rundown: ' + error.message)
+    }
+  }
+  bridge.commands.registerCommand('rundown.exportRundown', exportRundown)
+
+  /**
+   * Validate that an item has the required structure
+   * @param { Object } item The item to validate
+   * @param { Number } index The index of the item in the array (for error messages)
+   * @returns { void }
+   * @throws { Error } If the item is invalid
+   */
+  function validateItem (item, index) {
+    if (!item || typeof item !== 'object') {
+      throw new Error(`Item at index ${index} is not a valid object`)
+    }
+
+    if (!item.type || typeof item.type !== 'string') {
+      throw new Error(`Item at index ${index} is missing required field 'type'`)
+    }
+
+    if (item.data === undefined) {
+      throw new Error(`Item at index ${index} is missing required field 'data'`)
+    }
+
+    // Validate children if present
+    if (item.children !== undefined) {
+      if (!Array.isArray(item.children)) {
+        throw new Error(`Item at index ${index} has invalid 'children' field (must be an array)`)
+      }
+    }
+  }
+
+  /**
+   * Import items into a rundown
+   *
+   * Will create new item id's to avoid collisions with
+   * already existing items but keep the item structure
+   *
+   * @param { String } rundownId The id of the rundown to import into
+   * @param { Any[] } items An array of item objects to import
+   * @param { Object } options Import options
+   * @param { Boolean } options.clearExisting Whether to clear the rundown before importing (default: false)
+   * @returns { Promise.<void> }
+   */
+  async function importRundown (rundownId, items, options = {}) {
+    if (!rundownId) {
+      throw new Error('Rundown ID is required')
+    }
+
+    if (!items || !Array.isArray(items)) {
+      throw new Error('Invalid import data: items must be an array')
+    }
+
+    if (items.length === 0) {
+      throw new Error('Cannot import empty rundown. The file contains no items.')
+    }
+
+    // Validate all items before importing
+    for (let i = 0; i < items.length; i++) {
+      try {
+        validateItem(items[i], i)
+      } catch (error) {
+        throw new Error(`Validation failed: ${error.message}`)
+      }
+    }
+
+    // Clear existing items if requested
+    if (options.clearExisting) {
+      const existingItems = await getItems(rundownId)
+      if (existingItems.length > 0) {
+        await removeItemsFromParent(rundownId, existingItems)
+      }
+    }
+
+    // Use existing pasteItems to import
+    try {
+      await pasteItems(items, rundownId)
+    } catch (error) {
+      throw new Error('Failed to import items: ' + error.message)
+    }
+  }
+  bridge.commands.registerCommand('rundown.importRundown', importRundown)
 }
