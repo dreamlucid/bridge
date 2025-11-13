@@ -78,9 +78,9 @@ export function RundownItemTimeSection ({ item }) {
   }, [item?.state, item?.didStartPlayingAt, item?.willStartPlayingAt])
 
   if (
-    remaining == null
-    || !['playing', 'scheduled'].includes(item?.state)
-    || remaining <= 0
+    remaining == null ||
+    !['playing', 'scheduled'].includes(item?.state) ||
+    remaining <= 0
   ) {
     return <></>
   }

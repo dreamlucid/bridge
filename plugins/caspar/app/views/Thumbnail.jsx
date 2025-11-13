@@ -12,7 +12,7 @@ export const Thumbnail = () => {
     async function onSelectionChange (selection) {
       setSelection(selection)
     }
-    
+
     bridge.events.on('selection', onSelectionChange)
     return () => bridge.events.off('selection', onSelectionChange)
   }, [])

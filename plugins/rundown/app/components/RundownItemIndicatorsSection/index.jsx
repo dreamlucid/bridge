@@ -5,8 +5,8 @@ import { Icon } from '../Icon'
 import './style.css'
 
 const ACTIONS_ENUM = {
-  'SELECT_NEXT_ITEM': '2',
-  'PLAY_NEXT_ITEM': '1' 
+  SELECT_NEXT_ITEM: '2',
+  PLAY_NEXT_ITEM: '1'
 }
 
 export function RundownItemIndicatorsSection ({ item }) {
@@ -16,9 +16,8 @@ export function RundownItemIndicatorsSection ({ item }) {
         (
           item?.data?.onPlay === ACTIONS_ENUM.SELECT_NEXT_ITEM ||
           item?.data?.onEnd === ACTIONS_ENUM.SELECT_NEXT_ITEM
-        )
-        &&
-          <span className='RundownItemIndicatorsSection-icon'><Icon name='arrowDownSecondary' /></span>
+        ) &&
+        <span className='RundownItemIndicatorsSection-icon'><Icon name='arrowDownSecondary' /></span>
       }
       {
         (

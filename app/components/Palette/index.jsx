@@ -13,12 +13,12 @@ export const Palette = ({ open, onClose = () => {} }) => {
    * Collect results from
    * all integrations
    * on input
-   * 
+   *
    * This function will update
    * the state 'result'
-   * 
-   * @param { String } input 
-   * @returns 
+   *
+   * @param { String } input
+   * @returns
    */
   async function handleInput (input) {
     if (input === '') {
@@ -176,41 +176,41 @@ export const Palette = ({ open, onClose = () => {} }) => {
           if there are results to render
           */
           result.length
-          ? (
-              <div className='Palette-result'>
-                {
-                  /*
-                  Filter out integrations that
-                  didn't return any results
-                  */
-                  result
-                    .filter(({ rows }) => rows.length)
-                    .map(({ label, rows }) => {
-                      return (
-                        <>
-                          <label key={label} className='Palette-resultLabel u-text--label'>{label}</label>
-                          {
-                            rows.map((row, i) => {
-                              return (
-                                <div
-                                  key={`${label}:${i}`}
-                                  className='Palette-row is-selectable'
-                                  onClick={() => onClose()}
-                                  onKeyDown={e => handleRowKeyDown(e)}
-                                  tabIndex={0}
-                                >
-                                  {row}
-                                </div>
-                              )
-                            })
-                          }
-                        </>
-                      )
-                    })
-                }
-              </div>
-            )
-          : <></>
+            ? (
+                <div className='Palette-result'>
+                  {
+                    /*
+                    Filter out integrations that
+                    didn't return any results
+                    */
+                    result
+                      .filter(({ rows }) => rows.length)
+                      .map(({ label, rows }) => {
+                        return (
+                          <>
+                            <label key={label} className='Palette-resultLabel u-text--label'>{label}</label>
+                            {
+                              rows.map((row, i) => {
+                                return (
+                                  <div
+                                    key={`${label}:${i}`}
+                                    className='Palette-row is-selectable'
+                                    onClick={() => onClose()}
+                                    onKeyDown={e => handleRowKeyDown(e)}
+                                    tabIndex={0}
+                                  >
+                                    {row}
+                                  </div>
+                                )
+                              })
+                            }
+                          </>
+                        )
+                      })
+                  }
+                </div>
+              )
+            : <></>
         }
       </div>
     </div>

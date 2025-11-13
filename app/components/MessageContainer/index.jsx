@@ -83,13 +83,13 @@ export function MessageContainer () {
           Filer out messages that are of an invalid type
           */
           .filter(message => MESSAGE_TYPES[message.type])
-          
+
           /*
           Never show more messages than
           the max message count
           */
           .slice(Math.max(messages.length - MAX_SHOWN_MESSAGE_COUNT, 0), messages.length)
-          
+
           .map(message => {
             const Component = MESSAGE_TYPES[message.type].component
             return (

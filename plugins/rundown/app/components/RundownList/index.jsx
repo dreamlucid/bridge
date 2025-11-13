@@ -281,7 +281,7 @@ export function RundownList ({
     /*
     This handler will be called on both focus and mousedown events
     as focus won't be triggered if the item was already in focus
-    
+
     As mousedown will always trigger before focus we can skip
     the event if we know that focus will be triggered
 

@@ -26,7 +26,7 @@ import * as Layout from '../Layout'
  * An index of type properties
  * used for quick returns when
  * calling getReadablePropertiesForType
- * 
+ *
  * @type {{ String: TypeProperty }}
  */
 const propertyIndex = {}
@@ -34,13 +34,13 @@ const propertyIndex = {}
 /**
  * Get the readable properties
  * for a certain type
- * 
+ *
  * This function stores keeps
  * an index of the calculated properties
  * as a cache as it may be called
  * very frequently when loading
  * a rundown
- * 
+ *
  * @param { String } typeName The name of the type to calculate properties for
  * @returns { TypeProperty[] }
  */

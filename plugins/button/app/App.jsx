@@ -9,7 +9,7 @@ import { ItemDropArea } from './components/ItemDropArea'
  * Get the label to display in a button
  * for an item or non-item
  *
- * @param { any } item 
+ * @param { any } item
  * @returns { Promise.<String> }
  */
 async function getLabel (item) {
@@ -34,7 +34,7 @@ export default function App () {
   const [item, setItem] = React.useState()
 
   React.useEffect(() => {
-    const itemId = window.WIDGET_DATA?.['itemId']
+    const itemId = window.WIDGET_DATA?.itemId
     setItemId(itemId)
   }, [])
 
@@ -73,7 +73,7 @@ export default function App () {
 
   function handleItemChange (itemId) {
     window.WIDGET_UPDATE({
-      'itemId': itemId
+      itemId
     })
     setItemId(itemId)
   }

@@ -39,7 +39,11 @@ function ItemRow ({ item }) {
     setup()
 
     return () => {
-      bridge.events.off('shortcut', onShortcut)
+      async function teardown () {
+        const bridge = await api.load()
+        bridge.events.off('shortcut', onShortcut)
+      }
+      teardown()
     }
   }, [item])
 
@@ -59,8 +63,8 @@ function ItemRow ({ item }) {
 /**
  * Render elements
  * from a query
- * @param { String } query 
- * @returns 
+ * @param { String } query
+ * @returns
  */
 async function getItems (query) {
   const normalizedQuery = query.toLowerCase()
@@ -82,7 +86,7 @@ async function getItems (query) {
   return items
     .filter(item =>
       (item?.id || '').toLowerCase().includes(normalizedQuery) ||
-      (item?.data?.name || '').toLowerCase().includes(normalizedQuery) || 
+      (item?.data?.name || '').toLowerCase().includes(normalizedQuery) ||
       (item?._renderedName || '').toLowerCase().includes(normalizedQuery)
     )
     .map(item => {

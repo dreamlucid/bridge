@@ -1,7 +1,7 @@
 import React from 'react'
 import './style.css'
 
-import { Icon } from '../Icon'
+import { Icon } from '../Icon'
 
 export function Notification ({ type, size = 'normal', icon, title, description, controls = <></>, closable }) {
   const [isHidden, setIsHidden] = React.useState(false)

@@ -79,7 +79,7 @@ export const WorkspaceWidget = () => {
       <div className='View-component'>
         {
           widgetExists(widget?.component, repository)
-            ? <WidgetRenderer data={widget} onUpdate={data => handleComponentUpdate({ [id]: data })} forwardProps={{ enableFloat: false }} />
+            ? <WidgetRenderer data={widget} onUpdate={data => handleComponentUpdate({ [widget?.id]: data })} forwardProps={{ enableFloat: false }} />
             : <MissingComponent data={widget} />
         }
       </div>

@@ -42,7 +42,7 @@ export function Router ({ routes = DEFAULT_ROUTES }) {
     if (!path || !Array.isArray(routes)) {
       return <></>
     }
-  
+
     const route = router.findRoute(path, routes)
     return route?.render() || <></>
   }, [path, routes])

@@ -6,10 +6,10 @@ import './style.css'
 /**
  * A threshold for how long the context menu has
  * to have been open before an event can close it
- * 
+ *
  * This it to prevent the same event to
  * both open and close a context menu
- * 
+ *
  * @type { Number }
  */
 const OPEN_THRESHOLD_MS = 100

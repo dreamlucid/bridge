@@ -54,7 +54,7 @@ export function ContextAddMenu ({ onAdd = () => {} }) {
             belong to any specific category
             */
             if (id === NO_CATEGORY_ID) {
-              return category.map(type => 
+              return category.map(type =>
                 <ContextMenuItem key={type.id} text={type.name} onClick={() => handleClick(type.id)} />
               )
             }

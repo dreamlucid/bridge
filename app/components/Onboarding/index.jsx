@@ -20,7 +20,7 @@ export function Onboarding ({ onClose = () => {} }) {
     if (shared?._userDefaults?.didCompleteOnboarding >= new Date(content.updatedAt).getTime()) {
       return
     }
-  
+
     setOpen(true)
   }, [shared?._userDefaults])
 
@@ -32,7 +32,7 @@ export function Onboarding ({ onClose = () => {} }) {
     })
     setOpen(false)
   }
-  
+
   return (
     <Modal open={open} size='small'>
       <div className='Onboarding'>

@@ -3,10 +3,10 @@ import ReactDOM from 'react-dom'
 
 import App from './App'
 
+import './index.css'
+
 import * as _console from './utils/console'
 _console.init()
-
-import './index.css'
 
 ReactDOM.render(
   <React.StrictMode>

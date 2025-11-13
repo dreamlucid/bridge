@@ -37,8 +37,8 @@ function getCompletion (str, completions) {
  * Get all possible paths to
  * leaves from an object in
  * dot-notation
- * 
- * @param { Object } obj 
+ *
+ * @param { Object } obj
  * @returns { String[] }
  */
 function getPathsFromObject (obj) {

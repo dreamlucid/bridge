@@ -51,7 +51,7 @@ const INPUT_COMPONENTS = {
   string: VariableStringInput,
   color: ColorInput,
   enum: SelectInput,
-  text: TextInput,
+  text: TextInput
 }
 
 /**
@@ -138,7 +138,7 @@ export function Form () {
 
   /**
    * Get all global variables when the selection
-   * changes in order to populate the context and 
+   * changes in order to populate the context and
    * provide completions
    */
   React.useEffect(() => {
@@ -167,7 +167,7 @@ export function Form () {
    * The context used for
    * variable suggestions
    */
-  const variableContext = {this: firstItem, ...globalVariableContext}
+  const variableContext = { this: firstItem, ...globalVariableContext }
 
   /*
   Find out what the common properties
@@ -230,12 +230,12 @@ export function Form () {
   /**
    * Get the current value
    * for an object path
-   * 
+   *
    * This function will prefer using the locally
    * stored value from within this component but
    * fall back to the shared state
-   * 
-   * @param { String } path 
+   *
+   * @param { String } path
    * @returns { any | undefined }
    */
   function getValue (path) {

@@ -59,8 +59,8 @@ export function Rundown () {
       Limit the items to only relevant
       ones as early as possible
       */
-      .filter(item => itemIds.includes(item.dataset['itemId']))
-      .map(item => item.dataset['itemId'])
+      .filter(item => itemIds.includes(item.dataset.itemId))
+      .map(item => item.dataset.itemId)
 
     return order[order.length - 1]
   }
@@ -86,7 +86,7 @@ export function Rundown () {
       const lastItemIndexInParent = siblings.indexOf(lastItem?.id)
 
       bridge.commands.executeCommand('rundown.pasteItems', items, lastItem.parent, lastItemIndexInParent + 1)
-    
+
     /*
     Paste the items into the current
     rundown if no item is selected

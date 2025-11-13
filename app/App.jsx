@@ -107,7 +107,7 @@ export default function App () {
         const id = await bridge.client.registerClient()
         applyLocal({ id })
       }
-      
+
       bridge.transport.replayQueue()
 
       bridge.events.on('state.change', state => {

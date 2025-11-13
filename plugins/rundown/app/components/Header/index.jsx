@@ -109,11 +109,11 @@ export function Header () {
 
       // Show confirmation dialog for merge vs replace
       const shouldClear = window.confirm(
-        `Import Options:\n\n` +
+        'Import Options:\n\n' +
         `File: ${file.name}\n` +
         `Items to import: ${items.length}\n\n` +
-        `OK = Replace all items (clear existing)\n` +
-        `Cancel = Add to existing items (merge)`
+        'OK = Replace all items (clear existing)\n' +
+        'Cancel = Add to existing items (merge)'
       )
 
       // Perform the import

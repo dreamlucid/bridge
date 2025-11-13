@@ -36,7 +36,6 @@ export function PreferencesShortcutsInput () {
       bridge.shortcuts.registerShortcutOverride(shortcut.id, {
         trigger: newTrigger
       })
-      return
     }
   }
 

@@ -1,7 +1,7 @@
 import React from 'react'
 import './background.css'
 
-export function GridBackground ({ cols = 1, rows = 1}) {
+export function GridBackground ({ cols = 1, rows = 1 }) {
   return (
     <div className='Grid-background'>
       {

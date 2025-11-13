@@ -14,7 +14,7 @@ export const QueryPath = ({ path, children }) => {
     }
 
     onPopState()
-    
+
     window.addEventListener('popstate', onPopState)
     return window.removeEventListener('popstate', onPopState)
   }, [])

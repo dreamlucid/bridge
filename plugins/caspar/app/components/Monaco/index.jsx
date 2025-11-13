@@ -17,7 +17,7 @@ const CUSTOM_LANGUAGE_NAME = 'bridgeLang'
 /**
  * Code in this component is based on the
  * official documentation for the Monaco editor
- * 
+ *
  * @see https://microsoft.github.io/monaco-editor/typedoc/index.html
  */
 export const Monaco = ({ defaultValue = '', value = '', reset, onChange = () => {} }) => {
@@ -49,8 +49,8 @@ export const Monaco = ({ defaultValue = '', value = '', reset, onChange = () => 
         root: [
           [VARIABLE_REGEX, 'bridge-variable'],
           [F_FIELD_REGEX, 'bridge-caspar-f-field']
-        ],
-      },
+        ]
+      }
     })
 
     /*
@@ -94,7 +94,7 @@ export const Monaco = ({ defaultValue = '', value = '', reset, onChange = () => 
           the matched variable
           */
           const variable = await bridge.variables.getVariable(match[1])
-          
+
           return {
             range: new monaco.Range(
               position.lineNumber,
@@ -103,7 +103,7 @@ export const Monaco = ({ defaultValue = '', value = '', reset, onChange = () => 
               position.column + match[0].length
             ),
             contents: [
-              { value: "**VALUE**" },
+              { value: '**VALUE**' },
               {
                 value: variable?.value ?? '*Not set*'
               }

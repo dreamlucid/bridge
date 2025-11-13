@@ -3,7 +3,7 @@ import './style.css'
 
 export const ItemDropArea = ({ children, onDrop = () => {} }) => {
   const [isDraggedOver, setIsDraggedOver] = React.useState()
-  
+
   function handleDragOver (e) {
     e.preventDefault()
     setIsDraggedOver(true)

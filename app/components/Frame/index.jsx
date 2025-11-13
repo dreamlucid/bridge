@@ -99,7 +99,7 @@ export function Frame ({ src, api, doUpdateTheme = 1 }) {
         if (module === 'bridge') {
           /*
           Shim certain api functions to add caller
-          information for cleanup when the frame is 
+          information for cleanup when the frame is
           removed
           */
           return {
@@ -159,7 +159,7 @@ export function Frame ({ src, api, doUpdateTheme = 1 }) {
   }, [frameRef.current?.contentWindow])
 
   /*
-  Clean up all event listeners 
+  Clean up all event listeners
   added by this frame
   */
   React.useEffect(() => {

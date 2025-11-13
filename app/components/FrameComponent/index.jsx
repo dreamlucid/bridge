@@ -118,7 +118,7 @@ export function FrameComponent ({ data, onUpdate, enableFloat = true }) {
         if (module === 'bridge') {
           /*
           Shim certain api functions to add caller
-          information for cleanup when the frame is 
+          information for cleanup when the frame is
           removed
           */
           return {
@@ -173,7 +173,7 @@ export function FrameComponent ({ data, onUpdate, enableFloat = true }) {
   }, [data, shared, onUpdate])
 
   /*
-  Clean up all event listeners 
+  Clean up all event listeners
   added by this frame whenever
   the URI or caller changes
   */
