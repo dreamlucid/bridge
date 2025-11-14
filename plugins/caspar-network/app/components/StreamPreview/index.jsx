@@ -4,6 +4,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
+import bridge from 'bridge'
 
 import './style.css'
 
@@ -161,4 +162,3 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
     </div>
   )
 }
-

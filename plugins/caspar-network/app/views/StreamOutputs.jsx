@@ -401,7 +401,7 @@ export const StreamOutputs = () => {
                 <div style={{ padding: '8px', fontSize: '12px', color: 'var(--base-color--grey1)' }}>No output streams configured</div>
               )
             : (
-              streams.map(stream => (
+                streams.map(stream => (
                 <div key={stream.id} className='StreamList-item'>
                   <div className='StreamList-item-header'>
                     <div className='StreamList-item-title'>
@@ -449,8 +449,8 @@ export const StreamOutputs = () => {
                     </button>
                   </div>
                 </div>
-              ))
-            )}
+                ))
+              )}
         </div>
       </div>
       </div>
