@@ -46,6 +46,26 @@
               "component": "bridge.plugins.clock.latency"
             }
           }
+        },
+        "3": {
+          "title": "Network",
+          "component": "bridge.internals.grid",
+          "layout": {
+            "networkInputs": { "x": 0, "y": 0, "w": 8, "h": 8 },
+            "networkOutputs": { "x": 8, "y": 0, "w": 8, "h": 8 },
+            "networkPreview": { "x": 16, "y": 0, "w": 8, "h": 8 }
+          },
+          "children": {
+            "networkInputs": {
+              "component": "bridge.plugins.caspar-network.inputs"
+            },
+            "networkOutputs": {
+              "component": "bridge.plugins.caspar-network.outputs"
+            },
+            "networkPreview": {
+              "component": "bridge.plugins.caspar-network.preview"
+            }
+          }
         }
       }
     }

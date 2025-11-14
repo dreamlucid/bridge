@@ -1,0 +1,295 @@
+html, body, .View--flex {
+  position: relative;
+  width: 100%;
+  height: 100%;
+
+  padding: 0;
+  margin: 0;
+
+  overflow: hidden;
+  background: var(--base-color--background);
+}
+
+#root {
+  display: contents;
+  width: 100%;
+  height: 100%;
+  background: var(--base-color--background);
+}
+
+.View--flex {
+  display: flex;
+  flex-direction: column;
+}
+
+.u-scroll--y {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Custom scrollbar styling for better visibility */
+.u-scroll--y::-webkit-scrollbar {
+  width: 8px;
+}
+
+.u-scroll--y::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.u-scroll--y::-webkit-scrollbar-thumb {
+  background-color: var(--base-color--grey2);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.u-scroll--y::-webkit-scrollbar-thumb:hover {
+  background-color: var(--base-color--grey1);
+}
+
+.StreamManager {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  background: var(--base-color--background);
+}
+
+.StreamManager-content {
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+.StreamManager-header {
+  margin-bottom: 12px;
+}
+
+.StreamManager-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin: 0 0 8px 0;
+}
+
+.StreamList {
+  margin-bottom: 16px;
+}
+
+.StreamList-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.StreamList-item {
+  border: 1px solid var(--base-color--grey2);
+  border-radius: 4px;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: var(--base-color--background);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.StreamList-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.StreamList-item-title {
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.StreamList-item-status {
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.StreamList-item-status--active {
+  background: var(--base-color--accent1);
+  color: white;
+}
+
+.StreamList-item-status--stopped {
+  background: var(--base-color--grey2);
+  color: var(--base-color--grey1);
+}
+
+.StreamList-item-status--error {
+  background: var(--base-color--alert);
+  color: white;
+}
+
+.StreamList-item-details {
+  font-size: 12px;
+  color: var(--base-color--grey1);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.StreamList-item-details > div {
+  margin-bottom: 4px;
+}
+
+.StreamList-item-preview {
+  margin: 8px 0;
+  border-top: 1px solid var(--base-color--shade-2);
+  padding-top: 8px;
+}
+
+.StreamList-item-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.StreamForm {
+  border: 1px solid var(--base-color--grey2);
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: var(--base-color--background);
+  box-sizing: border-box;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+}
+
+.StreamForm > .Button {
+  margin-top: 8px;
+  width: 100%;
+}
+
+.StreamForm-title {
+  font-size: 14px;
+  font-weight: bold;
+  margin: 0 0 10px 0;
+}
+
+.StreamForm-field {
+  margin-bottom: 10px;
+}
+
+.StreamForm-field:last-of-type {
+  margin-bottom: 0;
+}
+
+.StreamForm-field:has(.StreamForm-checkbox) {
+  margin-bottom: 8px;
+}
+
+.StreamForm-label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.StreamForm-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--base-color--grey2);
+  border-radius: 3px;
+  font-size: 13px;
+  box-sizing: border-box;
+  background: var(--base-color--background);
+  color: var(--base-color);
+}
+
+.StreamForm-input:focus {
+  outline: none;
+  border-color: var(--base-color--accent1);
+  box-shadow: 0 0 0 1px var(--base-color--accent1);
+}
+
+select.StreamForm-input {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+}
+
+/* Light theme dropdown arrow */
+html[class*="u-theme--light"] select.StreamForm-input,
+html.u-theme--light select.StreamForm-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23000000' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+}
+
+.StreamForm-input--small {
+  width: 100px;
+}
+
+.StreamForm-row {
+  display: flex;
+  gap: 8px;
+}
+
+.StreamForm-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.StreamForm-checkbox input[type="checkbox"] {
+  margin: 0;
+}
+
+.StreamForm-error {
+  color: var(--base-color--alert);
+  font-size: 11px;
+  margin-top: 3px;
+  line-height: 1.3;
+}
+
+.Button {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--base-color--grey2);
+  background: var(--base-color--background);
+  color: var(--base-color);
+  cursor: pointer;
+  transition: all 0.2s;
+  box-sizing: border-box;
+  font-family: var(--base-fontFamily--primary);
+}
+
+.Button:hover:not(:disabled) {
+  background: var(--base-color--shade1);
+}
+
+.Button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.Button--ghost {
+  background: transparent;
+  border-color: var(--base-color--grey2);
+}
+
+.Button--ghost:hover:not(:disabled) {
+  background: var(--base-color--shade1);
+}
+
