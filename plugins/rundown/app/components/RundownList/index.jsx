@@ -7,7 +7,7 @@ import { SharedContext } from '../../sharedContext'
 
 import { RundownVariableItem } from '../RundownVariableItem'
 import { RundownDividerItem } from '../RundownDividerItem'
-import { RundownGroupItem, RundownGroupItemContext } from '../RundownGroupItem'
+import { RundownGroupItem, getContextMenuItems as rundownGroupItemGetContextMenuItems } from '../RundownGroupItem'
 import { RundownListItem } from '../RundownListItem'
 import { RundownItem } from '../RundownItem'
 
@@ -26,7 +26,7 @@ const TYPE_COMPONENTS = {
   'bridge.types.divider': { item: RundownDividerItem },
   'bridge.types.group': {
     item: RundownGroupItem,
-    context: RundownGroupItemContext
+    getContextMenuItems: item => rundownGroupItemGetContextMenuItems(item)
   }
 }
 
@@ -60,6 +60,23 @@ function scrollIntoView (el, animate = true, centered = true) {
   })
 }
 
+/**
+ * Blur the currently active element,
+ * this should be called on mousedown
+ * as that will enable the following
+ * focus event
+ *
+ * Without this an element that just was focused won't
+ * trigger the focus event when clicked a second time,
+ * causing the CMD+select operation to have no effect –
+ * when it should, in fact, unselect the item
+ *
+ * mousedown is always triggered before focus
+ */
+function blurActiveElementBeforeFocus () {
+  document.activeElement?.blur()
+}
+
 export function RundownList ({
   rundownId = '',
   className = '',
@@ -69,7 +86,6 @@ export function RundownList ({
   const [shared] = React.useContext(SharedContext)
 
   const elRef = React.useRef()
-  const focusRef = React.useRef()
 
   const itemIds = shared?.items?.[rundownId]?.children || []
 
@@ -277,26 +293,7 @@ export function RundownList ({
     bridge.commands.executeCommand('rundown.moveItem', rundownId, newIndex, itemId)
   }
 
-  async function handleFocus (itemId, eventType) {
-    /*
-    This handler will be called on both focus and mousedown events
-    as focus won't be triggered if the item was already in focus
-
-    As mousedown will always trigger before focus we can skip
-    the event if we know that focus will be triggered
-
-    So below we're keeping track of the last focused element
-    to determine if the focus event will be called so that
-    we can avoid double-triggers
-    */
-    if (focusRef.current === itemId && eventType === 'focus') {
-      return
-    }
-    if (focusRef.current !== itemId && eventType === 'mousedown') {
-      return
-    }
-    focusRef.current = itemId
-
+  async function handleFocus (itemId) {
     /*
     Handle selection
     using the meta key
@@ -400,7 +397,12 @@ export function RundownList ({
           .map((item, i) => {
             const isSelected = bridge.client.selection.isSelected(item.id)
             const ItemComponent = TYPE_COMPONENTS[item.type]?.item || RundownItem
-            const ExtraContextComponent = TYPE_COMPONENTS[item.type]?.context
+
+            let contextMenuItems
+            if (typeof TYPE_COMPONENTS[item.type]?.getContextMenuItems === 'function') {
+              contextMenuItems = TYPE_COMPONENTS[item.type].getContextMenuItems(item)
+            }
+
             return (
               <RundownListItem
                 key={item.id}
@@ -408,9 +410,9 @@ export function RundownList ({
                 index={i}
                 rundownId={rundownId}
                 onDrop={e => handleDrop(e, i)}
-                onFocus={e => handleFocus(item.id, 'focus')}
-                onMouseDown={e => handleFocus(item.id, 'mousedown')}
-                extraContextItems={ExtraContextComponent}
+                onFocus={e => handleFocus(item.id)}
+                onMouseDown={e => blurActiveElementBeforeFocus()}
+                contextMenuItems={contextMenuItems}
                 selected={isSelected}
               >
                 <ItemComponent index={`${indexPrefix}${i + 1}`} item={item}/>

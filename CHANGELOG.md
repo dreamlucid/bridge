@@ -4,8 +4,20 @@
 ### Fixed
 - The space key can now be used for keyboard shortcuts
 - An issue where items in the rundown couldn't rapidly be selected and de-selected
+- An issue where context menus were cut off in the rundown
+- An issue with the palette not setting proper keys
+- An issue with the palette not removing event listeners
+- The escape key causes weird behaviour when editing a shortcut
+- Closing shortcuts with the escape key prevents context menus in the edit mode 
 ### Added
 - Support for selecting multiple items at once with the shift key
+- An API for managing context menus
+- An API for managing the clipboard
+- Search in context menus
+- Keyboard control in context menus
+- Allow for setting default on play and on end actions
+- A modal stack for controlling the order in which modals are closed
+- A prompt to save if unsaved changes are detected
 
 ## 1.0.0-beta.7
 ### Changed
