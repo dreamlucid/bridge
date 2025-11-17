@@ -47,6 +47,12 @@ export function Preferences ({ onClose = () => {} }) {
   })
 
   /**
+   * Debounce timer for state updates
+   * to prevent excessive state changes while typing
+   */
+  const debounceTimerRef = React.useRef(null)
+
+  /**
    * All plugin sections
    * aggregated together
    */
@@ -81,12 +87,26 @@ export function Preferences ({ onClose = () => {} }) {
     }
   }, [shared._settings])
 
+  // Cleanup debounce timer on unmount
+  React.useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+    }
+  }, [])
+
   function handleSidebarClick (path) {
     const pane = sections[path[0]]?.items[path[1]]
     setSection(pane)
   }
 
   function handleCloseClick () {
+    // Flush any pending debounced updates before closing
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
+    }
     onClose()
   }
 
@@ -95,29 +115,38 @@ export function Preferences ({ onClose = () => {} }) {
    * at the specified
    * path in one of
    * the contexts
+   * Debounced to prevent excessive state changes while typing
    * @param {*} path
    * @param {*} value
    */
   function handleValueChange (path, value) {
-    const parts = path.split('.')
-    const context = parts.shift()
+    // Clear any existing debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
 
-    const apply = (function () {
-      switch (context) {
-        case 'shared':
-          return applyShared
-        case 'local':
-          return applyLocal
-        default:
-          return () => {}
-      }
-    })()
+    // Set a new debounce timer
+    debounceTimerRef.current = setTimeout(() => {
+      const parts = path.split('.')
+      const context = parts.shift()
 
-    const patch = {}
-    const valuePath = parts.join('.')
+      const apply = (function () {
+        switch (context) {
+          case 'shared':
+            return applyShared
+          case 'local':
+            return applyLocal
+          default:
+            return () => {}
+        }
+      })()
 
-    objectPath.set(patch, valuePath, value)
-    apply(patch)
+      const patch = {}
+      const valuePath = parts.join('.')
+
+      objectPath.set(patch, valuePath, value)
+      apply(patch)
+    }, 500) // 500ms debounce delay
   }
 
   const sidebar = (

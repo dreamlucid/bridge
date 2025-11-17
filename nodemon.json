@@ -1,0 +1,9 @@
+{
+  "ignore": [
+    "data/workspaces/**/*",
+    "data/UserDefaults.json",
+    "data/temp/**/*"
+  ],
+  "ext": "js,json,jsx"
+}
+

@@ -68,7 +68,7 @@ export const Workspace = () => {
   return (
     <>
       <Onboarding />
-      <Header title={getFileNameFromPath(shared._filePath)} />
+      <Header title={shared?._title || getFileNameFromPath(shared._filePath)} />
       {
         /*
         Render the message container unless

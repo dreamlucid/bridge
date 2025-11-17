@@ -1,0 +1,167 @@
+.WorkspaceManager {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.WorkspaceManager-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.WorkspaceManager-header h1 {
+  margin: 0;
+  font-size: 1.5em;
+}
+
+.WorkspaceManager-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: var(--base-color);
+}
+
+.WorkspaceManager-close:hover {
+  background: var(--base-color--shade);
+  opacity: 0.7;
+}
+
+.WorkspaceManager-error {
+  padding: 10px;
+  margin-bottom: 20px;
+  background: var(--base-color--error);
+  color: var(--base-color--background);
+  border-radius: 7px;
+  font-size: 0.9em;
+}
+
+.WorkspaceManager-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.WorkspaceManager-loading,
+.WorkspaceManager-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--base-color--shade);
+}
+
+.WorkspaceManager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.WorkspaceManager-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--base-color--shade);
+  border-radius: 7px;
+  background: var(--base-color--background);
+  transition: background 0.2s;
+}
+
+.WorkspaceManager-item:hover {
+  background: var(--base-color--shade);
+}
+
+.WorkspaceManager-itemContent {
+  flex: 1;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.WorkspaceManager-itemTitle {
+  font-weight: 500;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.WorkspaceManager-itemMeta {
+  font-size: 0.85em;
+  color: var(--base-color--shade);
+}
+
+.WorkspaceManager-itemAction {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: var(--base-color);
+  flex-shrink: 0;
+}
+
+.WorkspaceManager-itemAction:hover {
+  background: var(--base-color--shade);
+  opacity: 0.7;
+}
+
+.WorkspaceManager-rename {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.WorkspaceManager-renameInput {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid var(--base-color--shade);
+  border-radius: 7px;
+  background: var(--base-color--background);
+  color: var(--base-color);
+  font-size: 1em;
+  font-family: var(--base-fontFamily--primary);
+}
+
+.WorkspaceManager-renameInput:focus {
+  outline: none;
+  border-color: var(--base-color--accent1);
+}
+
+.WorkspaceManager-renameButton {
+  padding: 8px 16px;
+  border: 1px solid var(--base-color--shade);
+  border-radius: 7px;
+  background: var(--base-color--background);
+  color: var(--base-color);
+  cursor: pointer;
+  font-size: 0.9em;
+  font-family: var(--base-fontFamily--primary);
+}
+
+.WorkspaceManager-renameButton:hover {
+  background: var(--base-color--shade);
+  opacity: 0.7;
+}
+
+.WorkspaceManager-renameButton:first-of-type {
+  background: var(--base-color--accent1);
+  color: var(--base-color--background);
+  border-color: var(--base-color--accent1);
+}
+
+.WorkspaceManager-renameButton:first-of-type:hover {
+  opacity: 0.8;
+}
+

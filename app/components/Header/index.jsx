@@ -8,6 +8,7 @@ import { Modal } from '../Modal'
 import { Palette } from '../Palette'
 import { Sharing } from '../Sharing'
 import { Preferences } from '../Preferences'
+import { WorkspaceManager } from '../WorkspaceManager'
 
 import { Icon } from '../Icon'
 
@@ -45,20 +46,56 @@ export function Header ({ title = DEFAULT_TITLE, features }) {
   const [sharingOpen, setSharingOpen] = React.useState(false)
   const [prefsOpen, setPrefsOpen] = React.useState(false)
   const [roleOpen, setRoleOpen] = React.useState(false)
+  const [workspaceManagerOpen, setWorkspaceManagerOpen] = React.useState(false)
 
   const connectionCount = Object.keys(shared?._connections || {}).length
   const isEditingLayout = shared?._connections?.[local?.id]?.isEditingLayout
   const role = shared?._connections?.[local.id]?.role
 
+  /**
+   * Save the workspace
+   * Only available in web UI mode (not Electron)
+   */
+  const handleSave = React.useCallback(async () => {
+    if (isElectron()) {
+      // In Electron, save is handled by the menu
+      return
+    }
+
+    try {
+      const bridge = await api.load()
+      const result = await bridge.workspace.save()
+      // Show success message
+      bridge.messages.createTextMessage({
+        text: `Workspace saved: ${result.filename}`,
+        duration: 2000
+      })
+    } catch (err) {
+      console.error('Failed to save workspace:', err)
+      // Show error message
+      const bridge = await api.load()
+      bridge.messages.createTextMessage({
+        text: `Failed to save workspace: ${err.message}`,
+        duration: 3000
+      })
+    }
+  }, [])
+
   /*
   Listen for shortcuts
-  to open the palette
+  to open the palette and save
   */
   React.useEffect(() => {
     function onShortcut (shortcut) {
       switch (shortcut) {
         case 'openPalette':
           setPaletteIsOpen(true)
+          break
+        case 'save':
+          if (!isElectron()) {
+            handleSave()
+          }
+          break
       }
     }
 
@@ -75,7 +112,7 @@ export function Header ({ title = DEFAULT_TITLE, features }) {
       }
       teardown()
     }
-  }, [])
+  }, [handleSave])
 
   /**
    * Close the palette
@@ -119,6 +156,7 @@ export function Header ({ title = DEFAULT_TITLE, features }) {
         <Preferences onClose={() => setPrefsOpen(false)} />
       </Modal>
       <Palette open={paletteIsOpen} onClose={() => handlePaletteClose()} />
+      <WorkspaceManager open={workspaceManagerOpen} onClose={() => setWorkspaceManagerOpen(false)} />
       <header className={`Header ${isMacOS() && isElectron() ? 'hasLeftMargin' : ''}`} onDoubleClick={() => handleMaximize()}>
         <div className='Header-title'>
           { featureShown('title') && title }
@@ -173,6 +211,31 @@ export function Header ({ title = DEFAULT_TITLE, features }) {
             (
               <button className={`Header-button Header-editBtn ${isEditingLayout ? 'is-active' : ''}`} onClick={() => handleEdit(!isEditingLayout)} title='Edit layout'>
                 <Icon name='edit' color={isEditingLayout ? 'var(--base-color--accent1)' : 'var(--base-color)'} />
+              </button>
+            )
+          }
+          {
+            featureShown('save') && !isElectron() &&
+            (
+              <button
+                className='Header-button Header-saveBtn'
+                onClick={() => handleSave()}
+                title='Save workspace (Ctrl+S / Cmd+S)'
+                disabled={!shared?._hasUnsavedChanges}
+              >
+                <Icon name='edit' />
+              </button>
+            )
+          }
+          {
+            featureShown('workspaces') && !isElectron() &&
+            (
+              <button
+                className='Header-button Header-workspacesBtn'
+                onClick={() => setWorkspaceManagerOpen(true)}
+                title='Manage workspaces'
+              >
+                <Icon name='widget' />
               </button>
             )
           }

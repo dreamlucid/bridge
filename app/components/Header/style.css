@@ -132,3 +132,13 @@ for the traffic light
 .Header-button.is-active:hover {
   opacity: 0.7;
 }
+
+.Header-button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.Header-button:disabled:hover {
+  background: none;
+  opacity: 0.3;
+}
