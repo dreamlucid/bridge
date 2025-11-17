@@ -9,7 +9,7 @@ function flattenSpec (spec, parentLabel) {
     if (typeof item !== 'object') {
       continue
     }
-  
+
     let newLabel = item?.label
     if (parentLabel) {
       newLabel = `${parentLabel} > ${item?.label}`

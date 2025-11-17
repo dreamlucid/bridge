@@ -204,12 +204,12 @@ export function FrameComponent ({ data, onUpdate, enableFloat = true }) {
     async function onFocus () {
       setHasFocus(true)
       contentWindow.bridgeFrameHasFocus = true
-      
+
       const bridge = await api.load()
       bridge.ui.contextMenu.close()
     }
     contentWindow.addEventListener('focus', onFocus)
-    
+
     function onBlur () {
       setHasFocus(false)
       contentWindow.bridgeFrameHasFocus = false

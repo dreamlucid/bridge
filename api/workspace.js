@@ -115,4 +115,3 @@ DIController.main.register('Workspace', Workspace, [
 ])
 
 module.exports = Workspace
-

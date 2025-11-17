@@ -117,70 +117,75 @@ export function WorkspaceManager ({ open, onClose = () => {} }) {
         )}
 
         <div className='WorkspaceManager-content'>
-          {loading ? (
-            <div className='WorkspaceManager-loading'>Loading workspaces...</div>
-          ) : workspaces.length === 0 ? (
-            <div className='WorkspaceManager-empty'>No saved workspaces found</div>
-          ) : (
-            <div className='WorkspaceManager-list'>
-              {workspaces.map((workspace) => (
-                <div key={workspace.filePath} className='WorkspaceManager-item'>
-                  {renamingId === workspace.filePath ? (
-                    <div className='WorkspaceManager-rename'>
-                      <input
-                        type='text'
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleRename(workspace, renameValue)
-                          } else if (e.key === 'Escape') {
-                            cancelRename()
-                          }
-                        }}
-                        autoFocus
-                        className='WorkspaceManager-renameInput'
-                      />
-                      <button
-                        className='WorkspaceManager-renameButton'
-                        onClick={() => handleRename(workspace, renameValue)}
-                      >
-                        Save
-                      </button>
-                      <button
-                        className='WorkspaceManager-renameButton'
-                        onClick={cancelRename}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div
-                        className='WorkspaceManager-itemContent'
-                        onClick={() => handleOpenWorkspace(workspace.filePath)}
-                      >
-                        <div className='WorkspaceManager-itemTitle'>{workspace.title}</div>
-                        <div className='WorkspaceManager-itemMeta'>
-                          {formatDate(workspace.modified)}
-                        </div>
+          {loading
+            ? (
+                <div className='WorkspaceManager-loading'>Loading workspaces...</div>
+              )
+            : workspaces.length === 0
+              ? (
+                  <div className='WorkspaceManager-empty'>No saved workspaces found</div>
+                )
+              : (
+                  <div className='WorkspaceManager-list'>
+                    {workspaces.map((workspace) => (
+                      <div key={workspace.filePath} className='WorkspaceManager-item'>
+                        {renamingId === workspace.filePath
+                          ? (
+                              <div className='WorkspaceManager-rename'>
+                                <input
+                                  type='text'
+                                  value={renameValue}
+                                  onChange={(e) => setRenameValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleRename(workspace, renameValue)
+                                    } else if (e.key === 'Escape') {
+                                      cancelRename()
+                                    }
+                                  }}
+                                  autoFocus
+                                  className='WorkspaceManager-renameInput'
+                                />
+                                <button
+                                  className='WorkspaceManager-renameButton'
+                                  onClick={() => handleRename(workspace, renameValue)}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  className='WorkspaceManager-renameButton'
+                                  onClick={cancelRename}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            )
+                          : (
+                              <>
+                                <div
+                                  className='WorkspaceManager-itemContent'
+                                  onClick={() => handleOpenWorkspace(workspace.filePath)}
+                                >
+                                  <div className='WorkspaceManager-itemTitle'>{workspace.title}</div>
+                                  <div className='WorkspaceManager-itemMeta'>
+                                    {formatDate(workspace.modified)}
+                                  </div>
+                                </div>
+                                <button
+                                  className='WorkspaceManager-itemAction'
+                                  onClick={() => startRename(workspace)}
+                                  title='Rename workspace'
+                                >
+                                  <Icon name='edit' />
+                                </button>
+                              </>
+                            )}
                       </div>
-                      <button
-                        className='WorkspaceManager-itemAction'
-                        onClick={() => startRename(workspace)}
-                        title='Rename workspace'
-                      >
-                        <Icon name='edit' />
-                      </button>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+                    ))}
+                  </div>
+                )}
         </div>
       </div>
     </Modal>
   )
 }
-

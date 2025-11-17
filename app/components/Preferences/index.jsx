@@ -31,7 +31,7 @@ const INTERNAL_SETTINGS = [
   },
   {
     title: 'Project',
-    items: [      
+    items: [
       { title: 'State', items: state }
     ]
   }

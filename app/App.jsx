@@ -13,7 +13,6 @@ import { SocketContext } from './socketContext'
 
 import { useWebsocket } from './hooks/useWebsocket'
 
-
 import * as shortcuts from './utils/shortcuts'
 import * as browser from './utils/browser'
 import * as auth from './auth'
