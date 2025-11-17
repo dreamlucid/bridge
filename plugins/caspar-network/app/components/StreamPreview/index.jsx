@@ -3,13 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 import React, { useEffect, useRef, useState } from 'react'
-import Hls from 'hls.js'
 import bridge from 'bridge'
 
 import './style.css'
 
 /**
- * StreamPreview component for displaying HLS video streams
+ * StreamPreview component for displaying WebRTC video streams (low-latency real-time preview)
  * @param {Object} props
  * @param {string} props.streamId - Stream ID
  * @param {boolean} [props.autoPlay=true] - Auto-play the video
@@ -18,10 +17,11 @@ import './style.css'
  */
 export const StreamPreview = ({ streamId, autoPlay = true, controls = true, muted = true }) => {
   const videoRef = useRef(null)
-  const hlsRef = useRef(null)
+  const pcRef = useRef(null)
+  const wsRef = useRef(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [manifestUrl, setManifestUrl] = useState(null)
+  const [status, setStatus] = useState('disconnected')
 
   useEffect(() => {
     if (!streamId) {
@@ -34,17 +34,144 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
       try {
         setLoading(true)
         setError(null)
+        setStatus('connecting')
 
-        // Start HLS proxy and get manifest URL
-        const url = await bridge.commands.executeCommand('caspar-network.startPreview', streamId)
+        // Start WebRTC proxy and get signaling URL
+        const signalingUrl = await bridge.commands.executeCommand('caspar-network.startPreview', streamId)
         if (!isMounted) return
 
-        setManifestUrl(url)
+        // Connect to WebRTC signaling server
+        await connectWebRTC(signalingUrl)
       } catch (err) {
         if (!isMounted) return
-        console.error('Error starting preview:', err)
+        console.error('Error starting WebRTC preview:', err)
         setError(err.message || 'Failed to start preview')
         setLoading(false)
+        setStatus('error')
+      }
+    }
+
+    async function connectWebRTC (signalingUrl) {
+      try {
+        // Create RTCPeerConnection
+        const pc = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        })
+
+        pcRef.current = pc
+
+        // Handle incoming stream
+        pc.ontrack = (event) => {
+          if (videoRef.current && event.streams[0]) {
+            videoRef.current.srcObject = event.streams[0]
+            setStatus('connected')
+            setLoading(false)
+            if (autoPlay) {
+              videoRef.current.play().catch(err => {
+                console.error('Error playing video:', err)
+                setError('Autoplay blocked. Click play to start.')
+                setLoading(false)
+              })
+            }
+          }
+        }
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+              type: 'ice-candidate',
+              candidate: event.candidate
+            }))
+          }
+        }
+
+        pc.oniceconnectionstatechange = () => {
+          const state = pc.iceConnectionState
+          setStatus(state)
+          if (state === 'failed' || state === 'disconnected') {
+            setError(`Connection ${state}`)
+            setLoading(false)
+          }
+        }
+
+        pc.onerror = (err) => {
+          console.error('WebRTC error:', err)
+          setError('WebRTC connection error')
+          setLoading(false)
+          setStatus('error')
+        }
+
+        // Connect to signaling server
+        const ws = new WebSocket(signalingUrl)
+        wsRef.current = ws
+
+        ws.onopen = async () => {
+          setStatus('signaling')
+          // Create offer
+          const offer = await pc.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: true
+          })
+
+          await pc.setLocalDescription(offer)
+
+          // Send offer to signaling server
+          ws.send(JSON.stringify({
+            type: 'offer',
+            offer: offer
+          }))
+        }
+
+        ws.onmessage = async (event) => {
+          try {
+            const data = JSON.parse(event.data)
+
+            if (data.type === 'answer' && pcRef.current) {
+              await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer))
+            } else if (data.type === 'ice-candidate' && pcRef.current) {
+              await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate))
+            }
+          } catch (err) {
+            console.error('Error handling signaling message:', err)
+            setError('Signaling error')
+            setLoading(false)
+          }
+        }
+
+        ws.onerror = (err) => {
+          console.error('WebSocket error:', err)
+          setError('WebSocket connection error')
+          setLoading(false)
+          setStatus('error')
+        }
+
+        ws.onclose = () => {
+          setStatus('disconnected')
+          cleanup()
+        }
+      } catch (err) {
+        console.error('WebRTC connection error:', err)
+        setError(err.message || 'Failed to connect WebRTC')
+        setLoading(false)
+        setStatus('error')
+      }
+    }
+
+    function cleanup () {
+      if (pcRef.current) {
+        pcRef.current.close()
+        pcRef.current = null
+      }
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+      if (videoRef.current && videoRef.current.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach(track => track.stop())
+        videoRef.current.srcObject = null
       }
     }
 
@@ -52,6 +179,7 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
 
     return () => {
       isMounted = false
+      cleanup()
       // Stop preview when component unmounts
       if (streamId) {
         bridge.commands.executeCommand('caspar-network.stopPreview', streamId).catch(err => {
@@ -59,86 +187,13 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
         })
       }
     }
-  }, [streamId])
-
-  useEffect(() => {
-    if (!manifestUrl || !videoRef.current) {
-      return
-    }
-
-    const video = videoRef.current
-    let hls = null
-
-    // Check if HLS is natively supported
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS support (Safari)
-      video.src = manifestUrl
-      video.addEventListener('loadedmetadata', () => {
-        setLoading(false)
-      })
-      video.addEventListener('error', (e) => {
-        setError('Video playback error')
-        setLoading(false)
-      })
-    } else if (Hls.isSupported()) {
-      // Use hls.js for HLS playback
-      hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
-        backBufferLength: 90
-      })
-
-      hls.loadSource(manifestUrl)
-      hls.attachMedia(video)
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (autoPlay) {
-          video.play().catch(err => {
-            console.error('Error playing video:', err)
-            setError('Autoplay blocked. Click play to start.')
-            setLoading(false)
-          })
-        }
-        setLoading(false)
-      })
-
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              setError('Network error. Trying to recover...')
-              hls.startLoad()
-              break
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              setError('Media error. Trying to recover...')
-              hls.recoverMediaError()
-              break
-            default:
-              setError('Fatal error. Cannot recover.')
-              hls.destroy()
-              break
-          }
-        }
-      })
-    } else {
-      setError('HLS playback not supported in this browser')
-      setLoading(false)
-    }
-
-    hlsRef.current = hls
-
-    return () => {
-      if (hls) {
-        hls.destroy()
-        hlsRef.current = null
-      }
-    }
-  }, [manifestUrl, autoPlay])
+  }, [streamId, autoPlay])
 
   if (error) {
     return (
       <div className='StreamPreview StreamPreview--error'>
         <div className='StreamPreview-error'>{error}</div>
+        {status && <div className='StreamPreview-status'>Status: {status}</div>}
       </div>
     )
   }
@@ -148,7 +203,7 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
       {loading && (
         <div className='StreamPreview-loading'>
           <div className='StreamPreview-spinner' />
-          <div>Loading preview...</div>
+          <div>Connecting to stream... ({status})</div>
         </div>
       )}
       <video
@@ -159,6 +214,9 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
         muted={muted}
         playsInline
       />
+      {status !== 'connected' && status !== 'disconnected' && (
+        <div className='StreamPreview-status'>Status: {status}</div>
+      )}
     </div>
   )
 }

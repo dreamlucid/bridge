@@ -5,17 +5,19 @@
 const uuid = require('uuid')
 
 /**
- * @typedef {{
- *   id: String,
- *   serverId: String,
- *   channel: Number,
- *   layer: Number,
- *   srtUrl: String,
- *   loop: Boolean,
- *   status: 'active' | 'stopped' | 'error',
- *   createdAt: Number,
- *   lastError: String | null
- * }} InputStream
+   * @typedef {{
+   *   id: String,
+   *   serverId: String,
+   *   channel: Number,
+   *   layer: Number,
+   *   srtUrl: String,
+   *   loop: Boolean,
+   *   status: 'active' | 'stopped' | 'error',
+   *   createdAt: Number,
+   *   lastError: String | null,
+   *   previewStreamId: String | null,  // ID of the preview output stream
+   *   previewStreamIndex: Number | null  // Stream index of the preview output stream
+   * }} InputStream
 
  * @typedef {{
  *   id: String,
@@ -66,11 +68,27 @@ class StreamManager {
       loop,
       status: 'stopped',
       createdAt: Date.now(),
-      lastError: null
+      lastError: null,
+      previewStreamId: null,
+      previewStreamIndex: null
     }
 
     this.inputStreams.set(id, stream)
     return id
+  }
+
+  /**
+   * Set preview stream info for an input stream
+   * @param { String } streamId - Stream ID
+   * @param { String } previewStreamId - Preview output stream ID
+   * @param { Number } previewStreamIndex - Preview output stream index
+   */
+  setInputStreamPreviewStream (streamId, previewStreamId, previewStreamIndex) {
+    const stream = this.inputStreams.get(streamId)
+    if (stream) {
+      stream.previewStreamId = previewStreamId
+      stream.previewStreamIndex = previewStreamIndex
+    }
   }
 
   /**
