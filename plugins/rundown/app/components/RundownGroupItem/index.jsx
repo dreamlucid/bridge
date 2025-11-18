@@ -11,8 +11,6 @@ import { RundownItemProgress } from '../RundownItemProgress'
 import { RundownList } from '../RundownList'
 import { Icon } from '../Icon'
 
-import { ContextMenuItem } from '../../../../../app/components/ContextMenuItem'
-
 export function RundownGroupItem ({ index, item }) {
   const [shared] = React.useContext(SharedContext)
 

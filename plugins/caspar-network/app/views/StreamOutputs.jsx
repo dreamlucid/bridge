@@ -2,7 +2,7 @@ import React from 'react'
 import bridge from 'bridge'
 
 import { SharedContext } from '../sharedContext'
-import { StreamPreview } from '../components/StreamPreview'
+// Preview is only available in the Stream Preview widget, not in the Output Streams widget
 
 export const StreamOutputs = () => {
   const [state] = React.useContext(SharedContext)
@@ -424,11 +424,7 @@ export const StreamOutputs = () => {
                       </div>
                     )}
                   </div>
-                  {stream.status === 'active' && (
-                    <div className='StreamList-item-preview'>
-                      <StreamPreview streamId={stream.id} />
-                    </div>
-                  )}
+                  {/* Preview is only available in the Stream Preview widget */}
                   <div className='StreamList-item-actions'>
                     {stream.status === 'active'
                       ? (

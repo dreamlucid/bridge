@@ -137,7 +137,7 @@ exports.activate = async () => {
   streamMonitor.start()
 
   // Start WebRTC signaling server
-  webrtcProxy.startSignalingServer()
+  await webrtcProxy.startSignalingServer()
 
   // Register widgets
   bridge.widgets.registerWidget({

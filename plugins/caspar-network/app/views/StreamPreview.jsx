@@ -11,18 +11,16 @@ export const StreamPreview = () => {
 
   const pluginName = window.PLUGIN?.name || 'bridge-plugin-caspar-network'
 
-  // Load streams
+  // Load streams (only output streams for preview)
   React.useEffect(() => {
     async function loadStreams () {
       try {
         const streamList = await bridge.commands.executeCommand('caspar-network.listStreams')
-        const allStreams = [
-          ...(streamList?.inputs || []).map(s => ({ ...s, type: 'input' })),
-          ...(streamList?.outputs || []).map(s => ({ ...s, type: 'output' }))
-        ]
-        setStreams(allStreams)
-        // Auto-select first active stream if available
-        const activeStream = allStreams.find(s => s.status === 'active')
+        // Only show output streams for preview (input streams don't have preview)
+        const outputStreams = (streamList?.outputs || []).map(s => ({ ...s, type: 'output' }))
+        setStreams(outputStreams)
+        // Auto-select first active output stream if available
+        const activeStream = outputStreams.find(s => s.status === 'active')
         if (activeStream && !selectedStreamId) {
           setSelectedStreamId(activeStream.id)
         }
@@ -35,11 +33,9 @@ export const StreamPreview = () => {
     // Listen for state changes
     const streamsData = state?.plugins?.[pluginName]?.streams
     if (streamsData) {
-      const allStreams = [
-        ...(streamsData.inputs || []).map(s => ({ ...s, type: 'input' })),
-        ...(streamsData.outputs || []).map(s => ({ ...s, type: 'output' }))
-      ]
-      setStreams(allStreams)
+      // Only show output streams for preview (input streams don't have preview)
+      const outputStreams = (streamsData.outputs || []).map(s => ({ ...s, type: 'output' }))
+      setStreams(outputStreams)
     }
   }, [state, pluginName, selectedStreamId])
 
@@ -64,9 +60,7 @@ export const StreamPreview = () => {
               <option value=''>Select a stream...</option>
               {activeStreams.map(stream => (
                 <option key={stream.id} value={stream.id}>
-                  {stream.type === 'input'
-                    ? `Input: Channel ${stream.channel}, Layer ${stream.layer}`
-                    : `Output: Channel ${stream.channel}, Stream ${stream.streamIndex || 'N/A'}`}
+                  Output: Channel {stream.channel}, Stream {stream.streamIndex || 'N/A'}
                 </option>
               ))}
             </select>
@@ -78,9 +72,7 @@ export const StreamPreview = () => {
               <div className='StreamList-item' style={{ padding: '12px' }}>
                 <div className='StreamList-item-header'>
                   <div className='StreamList-item-title'>
-                    {selectedStream.type === 'input'
-                      ? `Input: Channel ${selectedStream.channel}, Layer ${selectedStream.layer}`
-                      : `Output: Channel ${selectedStream.channel}, Stream ${selectedStream.streamIndex || 'N/A'}`}
+                    Output: Channel {selectedStream.channel}, Stream {selectedStream.streamIndex || 'N/A'}
                   </div>
                   <div className={'StreamList-item-status StreamList-item-status--active'}>
                     ACTIVE

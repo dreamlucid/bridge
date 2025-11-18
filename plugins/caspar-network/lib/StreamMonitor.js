@@ -91,17 +91,56 @@ class StreamMonitor {
       const infoCommand = AMCP.info({ channel: stream.channel, layer: stream.layer })
       const response = await bridge.commands.executeCommand('caspar.sendString', stream.serverId, infoCommand)
 
-      // If we get a response, the stream is likely active
-      // If there's an error, mark as error
-      if (response && response.code === 200) {
-        // Stream appears to be active
-        // Could parse response to get more details
+      // logger.debug('Stream check response', { streamId: stream.id, response })
+
+      // Check if response is valid - code can be string or number, accept 200 and 201 as success
+      const responseCode = typeof response?.code === 'string' ? parseInt(response.code, 10) : response?.code
+      const isValidResponse = response && (responseCode === 200 || responseCode === 201)
+
+      if (isValidResponse) {
+        // Parse response data to check if layer is actually playing
+        // Response data can be an array of strings or a single string
+        let responseData = ''
+        if (Array.isArray(response.data)) {
+          responseData = response.data.join('\n')
+        } else if (response.data) {
+          responseData = response.data.toString()
+        }
+
+        // logger.debug('Stream check response data', { streamId: stream.id, responseData })
+
+        // Check if the layer is in a playing state
+        // CasparCG INFO response typically includes layer status
+        // If the layer is not playing or shows an error, mark as error
+        const upperData = responseData.toUpperCase()
+        if (upperData.includes('STOPPED') || upperData.includes('ERROR') || upperData.includes('FAILED')) {
+          await this.handleStreamError(stream.id, 'input', 'Layer is stopped or has an error')
+        } else if (upperData.includes('PLAYING') || upperData.includes('PAUSED') || upperData.includes('SRT') || responseData.length > 0) {
+          // Layer is playing or has content, which is good
+          // SRT streams might not explicitly say "PLAYING" but if we get valid data, it's likely active
+          // If it was in error state, clear it
+          const streams = await bridge.state.get(paths.STATE_STREAMS_PATH) || { inputs: [], outputs: [] }
+          const inputStream = streams.inputs?.find(s => s.id === stream.id)
+          if (inputStream && inputStream.status === 'error') {
+            await this.updateStreamStatus(stream.id, 'input', 'active', null)
+          }
+        } else {
+          // Got a valid response but couldn't determine state - log for debugging
+          logger.debug('Stream check: valid response but unclear state', { streamId: stream.id, responseData })
+        }
       } else {
-        // Stream might have stopped
-        await this.handleStreamError(stream.id, 'input', 'Stream check failed')
+        // Invalid response - log details for debugging
+        logger.warn('Stream check failed - invalid response', {
+          streamId: stream.id,
+          responseCode: response?.code,
+          responseType: typeof response?.code,
+          hasResponse: !!response
+        })
+        await this.handleStreamError(stream.id, 'input', `Stream check failed - invalid response from CasparCG (code: ${response?.code || 'none'})`)
       }
     } catch (err) {
       // Connection error or stream stopped
+      logger.warn('Stream check exception', { streamId: stream.id, error: err.message, stack: err.stack })
       await this.handleStreamError(stream.id, 'input', err.message || 'Stream check failed')
     }
   }
@@ -116,16 +155,75 @@ class StreamMonitor {
       const infoCommand = AMCP.info({ channel: stream.channel })
       const response = await bridge.commands.executeCommand('caspar.sendString', stream.serverId, infoCommand)
 
-      if (response && (response.code === 200 || response.code === 201)) {
-        // Stream appears to be active
-        // Update status if it was in error state
-        if (stream.status === 'error') {
-          await this.updateStreamStatus(stream.id, 'output', 'active', null)
+      // logger.debug('Output stream check response', { streamId: stream.id, response })
+
+      // Check if response is valid - code can be string or number, accept 200 and 201 as success
+      const responseCode = typeof response?.code === 'string' ? parseInt(response.code, 10) : response?.code
+      const isValidResponse = response && (responseCode === 200 || responseCode === 201)
+
+      if (isValidResponse) {
+        // Parse response data to check if stream is actually active
+        // Response data can be an array of strings or a single string
+        let responseData = ''
+        if (Array.isArray(response.data)) {
+          responseData = response.data.join('\n')
+        } else if (response.data) {
+          responseData = response.data.toString()
+        }
+
+        // logger.debug('Output stream check response data', { streamId: stream.id, responseData })
+
+        // Check if the stream is active in the response
+        // CasparCG INFO response includes stream information
+        const upperData = responseData.toUpperCase()
+
+        // If we have a stream index, check if it's mentioned in the response
+        if (stream.streamIndex != null) {
+          // Look for the stream index in the response
+          const streamIndexPattern = new RegExp(`STREAM[\\s:]+${stream.streamIndex}`, 'i')
+          if (streamIndexPattern.test(responseData)) {
+            // Stream is found in response, it's active
+            // If it was in error state, clear it
+            const streams = await bridge.state.get(paths.STATE_STREAMS_PATH) || { inputs: [], outputs: [] }
+            const outputStream = streams.outputs?.find(s => s.id === stream.id)
+            if (outputStream && outputStream.status === 'error') {
+              await this.updateStreamStatus(stream.id, 'output', 'active', null)
+            }
+          } else if (upperData.includes('ERROR') || upperData.includes('FAILED')) {
+            // Stream has an error
+            await this.handleStreamError(stream.id, 'output', 'Stream has an error in CasparCG response')
+          } else {
+            // Stream index not found but response is valid - might be stopped
+            logger.debug('Output stream check: stream index not found in response', { streamId: stream.id, streamIndex: stream.streamIndex })
+          }
+        } else {
+          // No stream index yet, but we got a valid response
+          // If response contains stream-related info, consider it potentially active
+          if (upperData.includes('STREAM') || responseData.length > 0) {
+            // Valid response with stream info
+            const streams = await bridge.state.get(paths.STATE_STREAMS_PATH) || { inputs: [], outputs: [] }
+            const outputStream = streams.outputs?.find(s => s.id === stream.id)
+            if (outputStream && outputStream.status === 'error') {
+              await this.updateStreamStatus(stream.id, 'output', 'active', null)
+            }
+          }
         }
       } else {
-        await this.handleStreamError(stream.id, 'output', 'Stream check failed - no response from server')
+        // Invalid response - log details for debugging
+        logger.warn('Output stream check failed - invalid response', {
+          streamId: stream.id,
+          responseCode: response?.code,
+          responseType: typeof response?.code,
+          hasResponse: !!response
+        })
+        // Only mark as error if it was previously active
+        if (stream.status === 'active') {
+          await this.handleStreamError(stream.id, 'output', `Stream check failed - invalid response from CasparCG (code: ${response?.code || 'none'})`)
+        }
       }
     } catch (err) {
+      // Connection error or stream stopped
+      logger.warn('Output stream check exception', { streamId: stream.id, error: err.message, stack: err.stack })
       // Only mark as error if it was previously active
       if (stream.status === 'active') {
         await this.handleStreamError(stream.id, 'output', err.message || 'Stream check failed')

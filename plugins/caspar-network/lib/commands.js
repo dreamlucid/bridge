@@ -107,18 +107,68 @@ async function addInputStream (serverId, channel, layer, srtUrl, loop = false) {
   const streamId = streamManager.addInputStream(serverId, channel, layer, srtUrl, loop)
   const stream = streamManager.getInputStream(streamId)
 
-  // Save to state
+  // Get default encoding options from settings
+  const settings = await bridge.state.get(paths.STATE_SETTINGS_PATH) || {}
+  const defaultEncodingOptions = settings.defaultEncodingOptions || {
+    format: 'mpegts',
+    codec: 'h264_nvenc',
+    preset: 'p4',
+    tune: 'll',
+    bitrate: '6000k',
+    maxrate: '6000k',
+    bufsize: '12000k',
+    gop: 50,
+    keyintMin: 50,
+    audio: false
+  }
+
+  // Generate SRT listener URL for output stream
+  // Parse input URL to extract parameters
+  let outputSrtUrl = 'srt://0.0.0.0:6000?mode=listener&latency=2000&transtype=live'
+  try {
+    const inputUrl = new URL(srtUrl.replace('srt://', 'http://'))
+    const latency = inputUrl.searchParams.get('latency') || '2000'
+    const transtype = inputUrl.searchParams.get('transtype') || 'live'
+
+    // Use port 6000 by default, or try to derive from input port
+    let outputPort = '6000'
+    if (inputUrl.port) {
+      // Try to use a different port (e.g., input port + 1000, or use 6000)
+      const inputPort = parseInt(inputUrl.port, 10)
+      if (inputPort && inputPort < 9000) {
+        outputPort = (inputPort + 1000).toString()
+      }
+    }
+
+    outputSrtUrl = `srt://0.0.0.0:${outputPort}?mode=listener&latency=${latency}&transtype=${transtype}`
+  } catch (err) {
+    logger.warn('Could not parse input SRT URL, using default output URL', { srtUrl, error: err.message })
+  }
+
+  // Automatically create a corresponding output stream
+  const outputStreamId = streamManager.addOutputStream(serverId, channel, outputSrtUrl, defaultEncodingOptions)
+  const outputStream = streamManager.getOutputStream(outputStreamId)
+
+  // Save both input and output streams to state
   bridge.state.apply({
     plugins: {
       [manifest.name]: {
         streams: {
-          inputs: { $push: [stream] }
+          inputs: { $push: [stream] },
+          outputs: { $push: [outputStream] }
         }
       }
     }
   })
 
-  logger.info('Input stream added', { streamId, channel, layer, srtUrl })
+  logger.info('Input stream added with automatic output stream', {
+    streamId,
+    outputStreamId,
+    channel,
+    layer,
+    srtUrl,
+    outputSrtUrl
+  })
   return streamId
 }
 exports.addInputStream = addInputStream
@@ -147,18 +197,52 @@ async function removeInputStream (streamId) {
     }
   }
 
+  // Find and remove associated output stream if it exists
+  // Output streams created automatically for input streams are on the same channel
+  const currentStreams = await bridge.state.get(paths.STATE_STREAMS_PATH) || { inputs: [], outputs: [] }
+  const inputStream = currentStreams.inputs?.find(s => s.id === streamId)
+
+  // Remove associated output stream (if it was auto-created for this input)
+  // We identify it by matching channel and checking if it's the only output for this channel
+  // This is a simple heuristic - in a more complex system, we'd track the relationship explicitly
+  let outputsToKeep = currentStreams.outputs || []
+  if (inputStream) {
+    // Find output streams on the same channel
+    const channelOutputs = (currentStreams.outputs || []).filter(s =>
+      s.serverId === inputStream.serverId && s.channel === inputStream.channel
+    )
+
+    // If there's exactly one output stream for this channel, it's likely the auto-created one
+    // Remove it when removing the input stream
+    if (channelOutputs.length === 1) {
+      const autoOutputId = channelOutputs[0].id
+      // Stop the output stream if it's active
+      if (channelOutputs[0].status === 'active' && channelOutputs[0].streamIndex != null) {
+        try {
+          const amcpCommand = AMCP.removeStream(channelOutputs[0].channel, channelOutputs[0].streamIndex)
+          await bridge.commands.executeCommand('caspar.sendString', channelOutputs[0].serverId, amcpCommand)
+        } catch (err) {
+          logger.warn('Error stopping associated output stream before removal', err)
+        }
+      }
+      streamManager.removeOutputStream(autoOutputId)
+      outputsToKeep = (currentStreams.outputs || []).filter(s => s.id !== autoOutputId)
+      logger.debug('Removed associated output stream', { inputStreamId: streamId, outputStreamId: autoOutputId })
+    }
+  }
+
   // Remove from stream manager
   streamManager.removeInputStream(streamId)
 
   // Remove from state
-  const currentStreams = await bridge.state.get(paths.STATE_STREAMS_PATH) || { inputs: [], outputs: [] }
   const newInputs = (currentStreams.inputs || []).filter(s => s.id !== streamId)
 
   bridge.state.apply({
     plugins: {
       [manifest.name]: {
         streams: {
-          inputs: { $replace: newInputs }
+          inputs: { $replace: newInputs },
+          outputs: { $replace: outputsToKeep }
         }
       }
     }
@@ -226,61 +310,8 @@ async function startInputStream (streamId) {
       throw new Error(errorMsg)
     }
 
-    // Create a preview output stream from the same channel
-    // This will be used for previewing the input stream
-    let previewStreamId = null
-    let previewStreamIndex = null
-
-    try {
-      // Generate a unique port for the preview stream (use a high port range to avoid conflicts)
-      // Port will be: 10000 + (streamId hash % 1000) to ensure uniqueness
-      const portHash = streamId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-      const previewPort = 10000 + (portHash % 1000)
-      const previewSrtUrl = `srt://localhost:${previewPort}?mode=listener&latency=500&transtype=live`
-
-      logger.debug('Creating preview output stream', { streamId, previewSrtUrl })
-
-      // Create preview output stream with low-quality encoding for preview
-      previewStreamId = await addOutputStream(
-        stream.serverId,
-        stream.channel,
-        previewSrtUrl,
-        {
-          format: 'mpegts',
-          codec: 'libx264', // Use software codec for preview
-          preset: 'veryfast',
-          tune: 'zerolatency',
-          bitrate: '1000k', // Low bitrate for preview
-          maxrate: '1000k',
-          bufsize: '2000k',
-          gop: 30,
-          keyintMin: 30,
-          audio: true
-        }
-      )
-
-      // Start the preview output stream
-      await startOutputStream(previewStreamId)
-
-      // Get the preview stream to find its stream index
-      const previewStream = streamManager.getOutputStream(previewStreamId)
-      previewStreamIndex = previewStream?.streamIndex || null
-
-      // Store preview stream info in input stream immediately
-      streamManager.setInputStreamPreviewStream(streamId, previewStreamId, previewStreamIndex)
-
-      logger.info('Preview output stream created', { streamId, previewStreamId, previewStreamIndex, previewSrtUrl })
-
-      // Start the preview FFmpeg connection immediately (in background)
-      // Note: We don't auto-start WebRTC preview anymore because:
-      // 1. RTP-to-WebRTC conversion requires a media server
-      // 2. The preview should be started explicitly by the user when needed
-      // This prevents connection errors and allows for better control
-      logger.debug('Preview output stream ready for manual preview start', { streamId, previewStreamId })
-    } catch (previewErr) {
-      logger.warn('Failed to create preview stream, continuing without preview', { streamId, error: previewErr.message })
-      // Don't fail the input stream if preview fails
-    }
+    // Note: Preview functionality is only available for output streams
+    // Input streams only show status information from CasparCG
 
     // Update status
     streamManager.updateInputStreamStatus(streamId, 'active')
@@ -292,9 +323,7 @@ async function startInputStream (streamId) {
         return {
           ...s,
           status: 'active',
-          lastError: null,
-          previewStreamId,
-          previewStreamIndex
+          lastError: null
         }
       }
       return s
@@ -310,7 +339,21 @@ async function startInputStream (streamId) {
       }
     })
 
-    logger.info('Input stream started successfully', { streamId, channel: stream.channel, layer: stream.layer, srtUrl: stream.srtUrl, previewStreamId })
+    logger.info('Input stream started successfully', { streamId, channel: stream.channel, layer: stream.layer, srtUrl: stream.srtUrl })
+
+    // Schedule a delayed check to verify the SRT connection actually succeeded
+    // CasparCG accepts the command immediately, but the SRT connection happens asynchronously
+    // Wait a few seconds then check if the connection actually succeeded
+    setTimeout(async () => {
+      try {
+        const pluginIndex = require('../index')
+        const monitor = pluginIndex.streamMonitor
+        await monitor.checkInputStream(stream)
+        logger.debug('Delayed connection check completed', { streamId })
+      } catch (err) {
+        logger.warn('Delayed connection check failed', { streamId, error: err.message })
+      }
+    }, 5000) // Check after 5 seconds
   } catch (err) {
     const errorMsg = err.message || 'Unknown error'
     logger.error('Error starting input stream', { streamId, error: errorMsg, stack: err.stack })
@@ -354,17 +397,7 @@ async function stopInputStream (streamId) {
     throw new Error('Input stream not found')
   }
 
-  // Stop and remove preview output stream if it exists
-  if (stream.previewStreamId) {
-    try {
-      logger.debug('Stopping preview output stream', { streamId, previewStreamId: stream.previewStreamId })
-      await stopOutputStream(stream.previewStreamId)
-      await removeOutputStream(stream.previewStreamId)
-    } catch (previewErr) {
-      logger.warn('Error stopping preview stream', { streamId, previewStreamId: stream.previewStreamId, error: previewErr.message })
-      // Continue even if preview stream removal fails
-    }
-  }
+  // Note: Preview streams are no longer automatically created for input streams
 
   // Build AMCP command
   const amcpCommand = AMCP.stop(stream.channel, stream.layer)
@@ -375,13 +408,12 @@ async function stopInputStream (streamId) {
 
     // Update status
     streamManager.updateInputStreamStatus(streamId, 'stopped')
-    streamManager.setInputStreamPreviewStream(streamId, null, null)
 
     // Update state
     const currentStreams = await bridge.state.get(paths.STATE_STREAMS_PATH) || { inputs: [], outputs: [] }
     const updatedInputs = (currentStreams.inputs || []).map(s => {
       if (s.id === streamId) {
-        return { ...s, status: 'stopped', lastError: null, previewStreamId: null, previewStreamIndex: null }
+        return { ...s, status: 'stopped', lastError: null }
       }
       return s
     })
@@ -696,26 +728,9 @@ async function startPreview (streamId) {
   let previewSrtUrl = null
 
   if (stream.type === 'input') {
-    // For input streams, use the preview output stream that was created
-    if (!stream.previewStreamId) {
-      throw new Error('Preview stream not available. Make sure the input stream is active.')
-    }
-
-    const previewStream = streamManager.getOutputStream(stream.previewStreamId)
-    if (!previewStream || previewStream.status !== 'active') {
-      throw new Error('Preview output stream is not active')
-    }
-
-    // The preview output stream is in listener mode (CasparCG is listening)
-    // FFmpeg needs to connect as caller, so change mode=listener to mode=caller
-    if (previewStream.srtUrl.includes('mode=listener')) {
-      previewSrtUrl = previewStream.srtUrl.replace('mode=listener', 'mode=caller')
-    } else if (previewStream.srtUrl.includes('?')) {
-      previewSrtUrl = previewStream.srtUrl + '&mode=caller'
-    } else {
-      previewSrtUrl = previewStream.srtUrl + '?mode=caller&latency=500&transtype=live'
-    }
-    logger.debug('Using preview output stream for input stream', { streamId, previewSrtUrl })
+    // Preview is only available for output streams
+    // Input streams should only show status information from CasparCG
+    throw new Error('Preview is not available for input streams. Please use an output stream for preview functionality.')
   } else if (stream.type === 'output') {
     // For output streams, use the existing output SRT URL
     // The output stream is in listener mode, so we connect as caller
@@ -737,11 +752,17 @@ async function startPreview (streamId) {
   }
 
   // Start WebRTC proxy (low-latency real-time preview)
+  // Note: Preview streams are created without audio (audio: false), so we disable audio encoding
+  // Using h264_nvenc (NVIDIA GPU encoder) for hardware acceleration
   const signalingUrl = await webrtcProxy.startProxy(streamId, previewSrtUrl, {
-    videoCodec: 'libvpx-vp8', // VP8 for better browser support
+    videoCodec: 'h264_nvenc', // NVIDIA GPU encoder for hardware acceleration
     audioCodec: 'libopus',
     videoBitrate: '2000k',
-    audioBitrate: '128k'
+    audioBitrate: '128k',
+    preset: 'p4', // Medium quality preset for NVIDIA encoder
+    tune: 'll', // Low latency tuning
+    gop: 30, // GOP size
+    hasAudio: false // Preview streams don't have audio
   })
 
   logger.debug('WebRTC preview started', { streamId, signalingUrl, previewSrtUrl })
@@ -778,8 +799,13 @@ async function getPreviewUrl (streamId) {
   const webrtcProxy = pluginIndex.webrtcProxy
 
   const proxyInfo = webrtcProxy.getProxy(streamId)
-  if (proxyInfo && webrtcProxy.port) {
-    return `ws://127.0.0.1:${webrtcProxy.port}?streamId=${streamId}`
+  if (proxyInfo) {
+    // If using Bridge server integration (port = 0), use relative path
+    if (webrtcProxy.port === 0) {
+      return `/api/v1/webrtc-signaling?streamId=${streamId}`
+    } else if (webrtcProxy.port) {
+      return `ws://127.0.0.1:${webrtcProxy.port}?streamId=${streamId}`
+    }
   }
   return null
 }

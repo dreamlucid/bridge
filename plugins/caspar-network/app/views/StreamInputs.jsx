@@ -2,7 +2,7 @@ import React from 'react'
 import bridge from 'bridge'
 
 import { SharedContext } from '../sharedContext'
-import { StreamPreview } from '../components/StreamPreview'
+// Preview is only available for output streams, not input streams
 
 export const StreamInputs = () => {
   const [state] = React.useContext(SharedContext)
@@ -302,11 +302,8 @@ export const StreamInputs = () => {
                       </div>
                     )}
                   </div>
-                  {stream.status === 'active' && (
-                    <div className='StreamList-item-preview'>
-                      <StreamPreview streamId={stream.id} />
-                    </div>
-                  )}
+                  {/* Preview is only available for output streams */}
+                  {/* Input streams only show status information from CasparCG */}
                   <div className='StreamList-item-actions'>
                     {stream.status === 'active'
                       ? (

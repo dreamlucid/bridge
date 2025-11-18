@@ -9,7 +9,6 @@ import * as contextMenu from '../utils/contextMenu'
 
 export function Rundown () {
   const [shared] = React.useContext(SharedContext)
-  const [contextPos, setContextPos] = React.useState()
 
   const elRef = React.useRef()
 
