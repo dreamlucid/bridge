@@ -49,7 +49,7 @@ async function initSettings () {
         settings: {
           defaultEncodingOptions: {
             format: 'mpegts',
-            codec: 'h264_nvenc',
+            codec: 'h264_vaapi', // Default to VAAPI (available in custom FFmpeg build)
             preset: 'p4',
             tune: 'll',
             bitrate: '6000k',

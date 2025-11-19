@@ -19,6 +19,7 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
   const videoRef = useRef(null)
   const pcRef = useRef(null)
   const wsRef = useRef(null)
+  const trackTimeoutRef = useRef(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState('disconnected')
@@ -65,6 +66,9 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
 
         // Handle incoming stream
         pc.ontrack = (event) => {
+          console.log('Received track event:', event)
+          console.log('Track kind:', event.track.kind)
+          console.log('Streams:', event.streams)
           if (videoRef.current && event.streams[0]) {
             videoRef.current.srcObject = event.streams[0]
             setStatus('connected')
@@ -75,6 +79,22 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
                 setError('Autoplay blocked. Click play to start.')
                 setLoading(false)
               })
+            }
+          } else if (event.track) {
+            // Handle case where track exists but no stream
+            console.log('Track received but no stream, creating MediaStream')
+            const stream = new MediaStream([event.track])
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream
+              setStatus('connected')
+              setLoading(false)
+              if (autoPlay) {
+                videoRef.current.play().catch(err => {
+                  console.error('Error playing video:', err)
+                  setError('Autoplay blocked. Click play to start.')
+                  setLoading(false)
+                })
+              }
             }
           }
         }
@@ -90,12 +110,34 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
 
         pc.oniceconnectionstatechange = () => {
           const state = pc.iceConnectionState
+          console.log('ICE connection state changed:', state)
           setStatus(state)
           if (state === 'failed' || state === 'disconnected') {
             setError(`Connection ${state}`)
             setLoading(false)
+          } else if (state === 'connected' || state === 'completed') {
+            // Connection established, but we still need to wait for tracks
+            console.log('ICE connection established, waiting for tracks...')
           }
         }
+
+        pc.onconnectionstatechange = () => {
+          const state = pc.connectionState
+          console.log('PeerConnection state changed:', state)
+          if (state === 'failed' || state === 'disconnected') {
+            setError(`PeerConnection ${state}`)
+            setLoading(false)
+          }
+        }
+
+        // Add timeout to detect if tracks never arrive
+        trackTimeoutRef.current = setTimeout(() => {
+          if (isMounted && loading && !videoRef.current?.srcObject) {
+            console.warn('No tracks received within 10 seconds')
+            setError('No video track received. The stream may not be available.')
+            setLoading(false)
+          }
+        }, 10000)
 
         pc.onerror = (err) => {
           console.error('WebRTC error:', err)
@@ -121,7 +163,7 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
           // Send offer to signaling server
           ws.send(JSON.stringify({
             type: 'offer',
-            offer: offer
+            offer
           }))
         }
 
@@ -161,6 +203,10 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
     }
 
     function cleanup () {
+      if (trackTimeoutRef.current) {
+        clearTimeout(trackTimeoutRef.current)
+        trackTimeoutRef.current = null
+      }
       if (pcRef.current) {
         pcRef.current.close()
         pcRef.current = null

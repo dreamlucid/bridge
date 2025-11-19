@@ -8,7 +8,7 @@
     "lint": "npx eslint .",
     "lint:fix": "npx eslint . --fix",
     "start": "node index.js",
-    "nodemon": "NODE_ENV=development nodemon --trace-warnings --inspect=0.0.0.0 index.js",
+    "nodemon": "NODE_ENV=development DEBUG=CasparNetworkPlugin,server nodemon --trace-warnings --inspect=0.0.0.0 index.js",
     "build": "npm run clean | webpack --config webpack.prod.js",
     "build:dev": "npm run clean | webpack --config webpack.dev.js",
     "watch": "webpack --config webpack.dev.js --watch",

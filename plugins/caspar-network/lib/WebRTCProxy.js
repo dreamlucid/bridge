@@ -8,8 +8,15 @@ const http = require('http')
 const net = require('net')
 const crypto = require('crypto')
 
+const { exec } = require('child_process')
+const { promisify } = require('util')
+const execAsync = promisify(exec)
+
 const Logger = require('../../../lib/Logger')
 const logger = new Logger({ name: 'CasparNetworkPlugin' })
+const WHIPServer = require('./WHIPServer')
+const { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate } = require('wrtc')
+const { FFMPEG_WEBRTC_PATH } = require('./paths')
 
 /**
  * Manages WebRTC proxy processes for SRT streams
@@ -17,11 +24,13 @@ const logger = new Logger({ name: 'CasparNetworkPlugin' })
  */
 class WebRTCProxy {
   constructor () {
-    /** @type {Map<string, {process: any, ws: any, srtUrl: string, port: number}>} */
+    /** @type {Map<string, {process: any, ws: any, srtUrl: string, browserPC: RTCPeerConnection | null}>} */
     this.activeProxies = new Map()
     this.wss = null
     this.server = null
     this.port = 0 // Will be set when server starts
+    this.whipServer = new WHIPServer(8080) // WHIP server for FFmpeg
+    this.whipPort = 0 // Will be set when WHIP server starts
   }
 
   /**
@@ -300,11 +309,18 @@ class WebRTCProxy {
             protocol: match[3],
             formats: match[4].trim().split(' ').filter(f => f),
             mid: null,
-            codecs: []
+            codecs: [],
+            setup: null // Will store DTLS setup attribute
           }
         }
       } else if (currentMLine && line.startsWith('a=mid:')) {
         currentMLine.mid = line.substring(6)
+      } else if (currentMLine && line.startsWith('a=setup:')) {
+        // Extract DTLS setup attribute: a=setup:actpass, a=setup:active, or a=setup:passive
+        const setupMatch = line.match(/a=setup:(actpass|active|passive)/)
+        if (setupMatch) {
+          currentMLine.setup = setupMatch[1]
+        }
       } else if (currentMLine && line.startsWith('a=rtpmap:')) {
         // Parse rtpmap to get codec info
         const match = line.match(/a=rtpmap:(\d+) (\w+)\/(\d+)/)
@@ -347,6 +363,24 @@ class WebRTCProxy {
     // Parse offer to get m-line structure
     const offerMLines = this.parseOfferMLines(offerSDP)
 
+    // Parse session-level setup attribute as fallback
+    // (media-level setup takes precedence, but session-level can be used as default)
+    const offerLines = offerSDP.split('\r\n')
+    let sessionSetup = null
+    let foundFirstMLine = false
+    for (const line of offerLines) {
+      if (line.startsWith('m=')) {
+        foundFirstMLine = true
+      } else if (!foundFirstMLine && line.startsWith('a=setup:')) {
+        // Session-level setup (before any m= line)
+        const setupMatch = line.match(/a=setup:(actpass|active|passive)/)
+        if (setupMatch) {
+          sessionSetup = setupMatch[1]
+          break
+        }
+      }
+    }
+
     // Parse FFmpeg SDP for codec info
     let ffmpegPayloadType = null
     let ffmpegCodec = null
@@ -384,6 +418,22 @@ class WebRTCProxy {
         const useCodec = ffmpegCodec || (videoCodec ? videoCodec.codec : 'H264')
         const usePayloadType = ffmpegPayloadType || (videoCodec ? videoCodec.payloadType : '96')
 
+        // Determine DTLS setup attribute for answer
+        // RFC 5763: Answerer must use 'active' or 'passive', not 'actpass'
+        // If offer has 'actpass', answer should use 'passive'
+        // If offer has 'active', answer should use 'passive'
+        // If offer has 'passive', answer should use 'active'
+        // Media-level setup takes precedence over session-level
+        const offerSetup = offerMLine.setup || sessionSetup
+        let setupValue = 'passive' // Default
+        if (offerSetup) {
+          if (offerSetup === 'actpass' || offerSetup === 'active') {
+            setupValue = 'passive'
+          } else if (offerSetup === 'passive') {
+            setupValue = 'active'
+          }
+        }
+
         // Add to active MIDs for BUNDLE
         activeMids.push(offerMLine.mid)
 
@@ -394,7 +444,7 @@ class WebRTCProxy {
         answerLines.push('a=ice-pwd:4x5b4x5b4x5b4x5b4x5b4x')
         answerLines.push('a=ice-options:trickle')
         answerLines.push('a=fingerprint:sha-256 ' + dtlsFingerprint.split(' ')[1])
-        answerLines.push('a=setup:actpass')
+        answerLines.push(`a=setup:${setupValue}`)
         answerLines.push(`a=mid:${offerMLine.mid}`)
         answerLines.push('a=sendonly')
         answerLines.push('a=rtcp-mux')
@@ -448,6 +498,7 @@ class WebRTCProxy {
 
   /**
    * Handle WebRTC signaling messages
+   * Bridges browser WebRTC to FFmpeg WHIP stream
    */
   async handleSignalingMessage (streamId, data) {
     const proxy = this.activeProxies.get(streamId)
@@ -458,47 +509,115 @@ class WebRTCProxy {
 
     switch (data.type) {
       case 'offer':
-        // Client sent an offer, we need to create an answer based on the SDP file
-        logger.debug('Received WebRTC offer', { streamId })
+        // Browser sent an offer - create browser PeerConnection and bridge to FFmpeg
+        logger.debug('Received WebRTC offer from browser', { streamId })
 
         try {
-          const fs = require('fs')
-
-          // Parse client offer
+          // Parse browser offer
           const clientOffer = data.offer || data
           const offerSDP = typeof clientOffer === 'string' ? clientOffer : clientOffer.sdp
 
-          // Read FFmpeg SDP if available
-          let ffmpegSDP = null
-          if (fs.existsSync(proxy.sdpPath)) {
-            ffmpegSDP = fs.readFileSync(proxy.sdpPath, 'utf8')
-            logger.debug('Using FFmpeg SDP for answer', { streamId, sdpPath: proxy.sdpPath })
-          } else {
-            logger.warn('SDP file not found, creating answer without FFmpeg codec info', { streamId, sdpPath: proxy.sdpPath })
+          // Get FFmpeg PeerConnection from WHIP server
+          const ffmpegPC = this.whipServer.getFFmpegPeerConnection(streamId)
+          if (!ffmpegPC) {
+            logger.warn('FFmpeg PeerConnection not ready yet, waiting...', { streamId })
+            // Wait a bit for FFmpeg to connect to WHIP server
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            const retryPC = this.whipServer.getFFmpegPeerConnection(streamId)
+            if (!retryPC) {
+              throw new Error('FFmpeg has not connected to WHIP server yet')
+            }
           }
 
-          // Create WebRTC-compatible answer SDP matching offer structure
-          const answerSDP = this.createWebRTCAnswerSDP(offerSDP, ffmpegSDP, proxy.port)
+          // Create browser PeerConnection
+          const browserPC = new RTCPeerConnection({
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' }
+            ]
+          })
 
-          logger.debug('Sending WebRTC answer', { streamId })
+          // Bridge will be handled by WHIP server's setBrowserPeerConnection
+          // which properly uses transceivers to forward tracks
 
-          const answer = {
-            type: 'answer',
-            sdp: answerSDP
+          // Set up browser PeerConnection event handlers
+          browserPC.onicecandidate = (event) => {
+            if (event.candidate && proxy.ws) {
+              proxy.ws.send(JSON.stringify({
+                type: 'ice-candidate',
+                candidate: event.candidate
+              }))
+            }
           }
 
+          browserPC.oniceconnectionstatechange = () => {
+            logger.debug('Browser ICE connection state', {
+              streamId,
+              state: browserPC.iceConnectionState
+            })
+          }
+
+          browserPC.onconnectionstatechange = () => {
+            logger.debug('Browser connection state', {
+              streamId,
+              state: browserPC.connectionState
+            })
+          }
+
+          // Store browser PeerConnection
+          proxy.browserPC = browserPC
+
+          // Set browser PeerConnection in WHIP server (for track forwarding)
+          this.whipServer.setBrowserPeerConnection(streamId, browserPC)
+
+          // Set remote description (browser's offer)
+          const offer = new RTCSessionDescription({
+            type: 'offer',
+            sdp: offerSDP
+          })
+          await browserPC.setRemoteDescription(offer)
+
+          // Create answer
+          const answer = await browserPC.createAnswer()
+          await browserPC.setLocalDescription(answer)
+
+          logger.debug('Created answer for browser', { streamId })
+
+          // Send answer to browser
           proxy.ws.send(JSON.stringify({
             type: 'answer',
-            answer
+            answer: {
+              type: 'answer',
+              sdp: answer.sdp
+            }
           }))
         } catch (err) {
-          logger.error('Error handling offer', { streamId, error: err.message, stack: err.stack })
+          logger.error('Error handling browser offer', {
+            streamId,
+            error: err.message,
+            stack: err.stack
+          })
+          if (proxy.ws) {
+            proxy.ws.send(JSON.stringify({
+              type: 'error',
+              message: err.message
+            }))
+          }
         }
         break
       case 'ice-candidate':
-        // Store ICE candidate for later use (if needed)
-        logger.debug('Received ICE candidate', { streamId })
-        // In a full implementation, we'd forward this to FFmpeg or handle it
+        // Forward ICE candidate to browser PeerConnection
+        logger.debug('Received ICE candidate from browser', { streamId })
+        if (proxy.browserPC && data.candidate) {
+          try {
+            const candidate = new RTCIceCandidate(data.candidate)
+            await proxy.browserPC.addIceCandidate(candidate)
+          } catch (err) {
+            logger.warn('Error adding ICE candidate to browser PC', {
+              streamId,
+              error: err.message
+            })
+          }
+        }
         break
       default:
         logger.warn('Unknown signaling message type', { streamId, type: data.type })
@@ -506,7 +625,7 @@ class WebRTCProxy {
   }
 
   /**
-   * Start WebRTC proxy for a stream
+   * Start WebRTC proxy for a stream using WHIP
    * @param {string} streamId - Stream ID
    * @param {string} srtUrl - SRT URL to proxy
    * @param {Object} options - Proxy options
@@ -521,51 +640,92 @@ class WebRTCProxy {
     // Ensure signaling server is running
     if (!this.wss) {
       await this.startSignalingServer()
-      // Server is now guaranteed to be listening (or port is set)
     }
 
-    // Generate a unique port for RTP (WebRTC uses RTP internally)
-    const portHash = streamId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-    const rtpPort = 50000 + (portHash % 1000)
+    // Ensure WHIP server is running
+    if (this.whipPort === 0) {
+      this.whipPort = await this.whipServer.start()
+      logger.info('WHIP server ready', { port: this.whipPort })
+    }
 
-    // Use RTP output - more reliable and widely supported
-    // We'll handle WebRTC signaling separately
-    return this.startRTPProxy(streamId, srtUrl, {}, rtpPort)
+    // Start WHIP proxy
+    return this.startWHIPProxy(streamId, srtUrl, options)
   }
 
   /**
-   * Start RTP proxy and handle WebRTC signaling
-   * FFmpeg outputs to RTP, and we handle WebRTC signaling via WebSocket
+   * Detect available video encoder (preferring GPU encoders)
+   * @returns {Promise<string>} Codec name
    */
-  async startRTPProxy (streamId, srtUrl, options, rtpPort) {
+  async detectAvailableCodec () {
+    try {
+      const { stdout } = await execAsync(`${FFMPEG_WEBRTC_PATH} -hide_banner -encoders 2>&1`)
+
+      // Priority order: GPU encoders first, then CPU
+      if (stdout.includes('h264_nvenc')) {
+        logger.debug('Detected NVIDIA encoder (h264_nvenc)')
+        return 'h264_nvenc'
+      }
+      if (stdout.includes('h264_vaapi')) {
+        logger.debug('Detected VAAPI encoder (h264_vaapi) - GPU acceleration')
+        return 'h264_vaapi'
+      }
+      if (stdout.includes('h264_v4l2m2m')) {
+        logger.debug('Detected V4L2 encoder (h264_v4l2m2m) - GPU acceleration')
+        return 'h264_v4l2m2m'
+      }
+      if (stdout.includes('libx264')) {
+        logger.debug('Detected CPU encoder (libx264)')
+        return 'libx264'
+      }
+
+      // Fallback to first available H.264 encoder
+      const h264Match = stdout.match(/V[^ ]+ +([a-z0-9_]+h264[a-z0-9_]*)/i)
+      if (h264Match) {
+        logger.debug(`Using detected H.264 encoder: ${h264Match[1]}`)
+        return h264Match[1]
+      }
+
+      logger.warn('No H.264 encoder found, using h264_vaapi as default')
+      return 'h264_vaapi'
+    } catch (err) {
+      logger.warn('Error detecting codec, using h264_vaapi as default', { error: err.message })
+      return 'h264_vaapi'
+    }
+  }
+
+  /**
+   * Start WHIP proxy - FFmpeg outputs to WHIP, we bridge to browser WebRTC
+   * @param {string} streamId - Stream ID
+   * @param {string} srtUrl - SRT URL to proxy
+   * @param {Object} options - Proxy options
+   * @returns {Promise<string>} WebRTC signaling URL
+   */
+  async startWHIPProxy (streamId, srtUrl, options) {
+    // Detect available codec if not specified
+    let detectedCodec
+    if (options.videoCodec) {
+      detectedCodec = options.videoCodec
+      logger.debug('Using specified video codec', { streamId, codec: detectedCodec })
+    } else {
+      detectedCodec = await this.detectAvailableCodec()
+      logger.info('Auto-detected video codec', { streamId, codec: detectedCodec })
+    }
+
     const {
-      videoCodec = 'h264_nvenc', // Default to NVIDIA GPU encoder
-      audioCodec = 'libopus', // Reserved for future use (RTP muxer currently only supports video)
+      videoCodec = detectedCodec, // Use detected codec or specified one
+      audioCodec = 'libopus',
       videoBitrate = '2000k',
-      audioBitrate = '128k', // Reserved for future use (RTP muxer currently only supports video)
-      hasAudio = true, // Tracked for metadata, but RTP muxer only supports video
+      audioBitrate = '128k',
+      hasAudio = true,
       preset = 'p4', // NVIDIA encoder preset (p1-p7, p4 = medium quality)
       tune = 'll', // Low latency tuning for NVIDIA encoder
       gop = 30 // GOP size
     } = options
 
-    // Note: RTP muxer only supports one stream (video only)
-    // audioCodec and audioBitrate are kept for API compatibility but not currently used
-    // eslint-disable-next-line no-unused-vars
-    const _audioCodec = audioCodec
-    // eslint-disable-next-line no-unused-vars
-    const _audioBitrate = audioBitrate
+    // WHIP endpoint URL
+    const whipUrl = `http://127.0.0.1:${this.whipPort}/whip/${streamId}`
 
-    // Use RTP output with SDP file for WebRTC
-    // FFmpeg will generate an SDP file that describes the RTP stream
-    const sdpPath = require('path').join(require('os').tmpdir(), `bridge-caspar-network-webrtc-${streamId}.sdp`)
-
-    // Generate separate ports for video and audio (RTP requires separate ports)
-    // Video uses the base port, audio uses base port + 1
-    const videoPort = rtpPort
-    const audioPort = rtpPort + 1
-
-    // Build FFmpeg arguments
+    // Build FFmpeg arguments for WHIP output
     const ffmpegArgs = [
       // Input flags for low latency and SRT connection
       '-fflags', '+genpts',
@@ -574,57 +734,86 @@ class WebRTCProxy {
       // SRT-specific options for better connection handling
       '-analyzeduration', '1000000', // 1 second to analyze input
       '-probesize', '1000000', // 1 MB probe size
+      // Hardware acceleration for VAAPI (if using VAAPI encoder) - must be before input
+      ...(videoCodec === 'h264_vaapi' || videoCodec === 'hevc_vaapi'
+        ? [
+            '-hwaccel', 'vaapi', // Enable VAAPI hardware acceleration
+            '-hwaccel_output_format', 'vaapi' // Output format for VAAPI
+          ]
+        : []),
       // Enable verbose logging to debug connection issues
       '-loglevel', 'info',
       // SRT input - connection options are in the SRT URL itself
       '-i', srtUrl,
 
-      // Stream mapping - RTP muxer only supports one stream (video only)
-      // Always map only the video stream to avoid RTP muxer errors
+      // Stream mapping - map video and audio if available
       '-map', '0:v:0',
+      ...(hasAudio ? ['-map', '0:a:0'] : []),
 
       // Video encoding settings
-      '-pix_fmt', 'yuv420p',
+      // Note: VAAPI uses 'vaapi' pixel format, others use 'yuv420p'
+      '-pix_fmt', (videoCodec === 'h264_vaapi' || videoCodec === 'hevc_vaapi') ? 'vaapi' : 'yuv420p',
       '-c:v', videoCodec,
-      // GPU encoder parameters (for h264_nvenc)
+      // Encoder-specific parameters
       ...(videoCodec === 'h264_nvenc' || videoCodec === 'hevc_nvenc'
         ? [
-            '-preset:v', preset, // NVIDIA encoder preset
-            '-tune:v', tune, // Low latency tuning
-            '-rc:v', 'vbr', // Variable bitrate mode
-            '-rc-lookahead:v', '0', // Disable lookahead for low latency
-            '-spatial-aq:v', '0', // Disable spatial AQ for low latency
-            '-temporal-aq:v', '0' // Disable temporal AQ for low latency
+            // NVIDIA encoder options (for FFmpeg 4.x compatibility)
+            '-preset', preset, // Preset: p1-p7 (p4 = medium quality)
+            '-tune', tune, // Tune: ll (low latency)
+            '-rc', 'vbr', // Rate control: vbr (variable bitrate)
+            '-rc-lookahead', '0', // Disable lookahead for low latency
+            '-spatial-aq', '0', // Disable spatial AQ
+            '-temporal-aq', '0' // Disable temporal AQ
           ]
-        : videoCodec.startsWith('libvpx')
+        : videoCodec === 'h264_vaapi'
           ? [
-              '-deadline', 'realtime', // VP8/VP9 realtime encoding
-              '-cpu-used', '8' // VP8/VP9 speed setting
+              // VAAPI encoder options (Intel/AMD GPU)
+              '-rc_mode', 'VBR', // Rate control: VBR (variable bitrate)
+              '-quality', '4', // Quality: 1-7 (4 = balanced, higher = faster)
+              '-async_depth', '4', // Parallelism for low latency
+              '-low_power', '0' // Disable low power mode for better quality
             ]
-          : []), // Other codecs use default settings
+          : videoCodec === 'h264_v4l2m2m'
+            ? [
+                // V4L2 encoder options (ARM/Raspberry Pi GPU)
+                '-num_capture_buffers', '4' // Buffer count for low latency
+              ]
+            : videoCodec === 'libx264'
+              ? [
+                  // CPU encoder options
+                  '-preset', 'ultrafast', // Preset: ultrafast for low latency
+                  '-tune', 'zerolatency', // Tune: zerolatency
+                  '-profile:v', 'baseline' // Profile: baseline for compatibility
+                ]
+              : videoCodec.startsWith('libvpx')
+                ? [
+                    // VP8/VP9 encoder options
+                    '-deadline', 'realtime', // Realtime encoding
+                    '-cpu-used', '8' // Speed setting
+                  ]
+                : []), // Other codecs use default settings
       '-b:v', videoBitrate,
       '-maxrate', videoBitrate,
       '-bufsize', `${parseInt(videoBitrate) * 2}k`,
       '-g', gop.toString(),
 
-      // Audio encoding (only if audio is present)
-      // Note: RTP muxer only supports one stream, so we disable audio for RTP output
-      // If audio is needed in the future, we'd need separate RTP outputs or a different muxer
-      '-an', // Always disable audio for RTP (RTP muxer limitation)
+      // Audio encoding (if audio is present)
+      ...(hasAudio
+        ? [
+            '-c:a', audioCodec,
+            '-b:a', audioBitrate
+          ]
+        : ['-an']), // Disable audio if not present
 
-      // RTP output format
-      '-f', 'rtp',
-      '-sdp_file', sdpPath,
-
-      // RTP output URL - FFmpeg RTP muxer only supports one stream (video only)
-      `rtp://127.0.0.1:${videoPort}`
+      // WHIP output format
+      '-f', 'whip',
+      // WHIP endpoint URL
+      whipUrl
     ]
 
-    logger.debug('Starting FFmpeg RTP proxy for WebRTC', {
+    logger.debug('Starting FFmpeg WHIP proxy for WebRTC', {
       streamId,
-      videoPort,
-      audioPort: hasAudio ? audioPort : 'disabled',
-      sdpPath,
+      whipUrl,
       ffmpegArgs: ffmpegArgs.join(' '),
       hasAudio
     })
@@ -635,48 +824,39 @@ class WebRTCProxy {
       process: null, // Will be set after spawn
       ws: null,
       srtUrl,
-      port: videoPort,
-      audioPort: hasAudio ? audioPort : null,
-      sdpPath,
-      useWebRTC: false,
+      browserPC: null, // Browser PeerConnection (set when browser connects)
       hasAudio
     }
     this.activeProxies.set(streamId, proxyInfo)
 
-    const ffmpegProcess = spawn('ffmpeg', ffmpegArgs)
+    // Use WebRTC-enabled FFmpeg for WebRTC operations
+    const ffmpegProcess = spawn(FFMPEG_WEBRTC_PATH, ffmpegArgs)
 
     // Update proxy info with the process
     proxyInfo.process = ffmpegProcess
 
-    // Wait for SDP file to be generated (with timeout)
-    const fs = require('fs')
-    let sdpReady = false
-    const maxWaitTime = 20000 // 5 seconds
-    const checkInterval = 100 // Check every 100ms
-    const startTime = Date.now()
-
-    while (!sdpReady && (Date.now() - startTime) < maxWaitTime) {
-      if (fs.existsSync(sdpPath)) {
-        sdpReady = true
-        logger.debug('SDP file generated', { streamId, sdpPath })
-        break
-      }
-      await new Promise(resolve => setTimeout(resolve, checkInterval))
-    }
-
-    if (!sdpReady) {
-      logger.warn('SDP file not generated within timeout', { streamId, sdpPath, timeout: maxWaitTime })
-    }
+    // FFmpeg will connect to WHIP server automatically
+    // WHIP server will handle the WebRTC negotiation with FFmpeg
+    // We just need to wait for browser to connect and bridge the connections
 
     // Collect all stderr output for better debugging
     let stderrBuffer = ''
+    let ffmpegStreamingStarted = false
+
+    // Set up stderr handler BEFORE waiting for SDP to catch early messages
     ffmpegProcess.stderr.on('data', (data) => {
       const output = data.toString()
       stderrBuffer += output
 
+      // Check if FFmpeg has started streaming
+      if (!ffmpegStreamingStarted && (output.includes('Stream mapping') || output.includes('Press [q]'))) {
+        ffmpegStreamingStarted = true
+        logger.debug('FFmpeg started streaming', { streamId })
+      }
+
       // Log important FFmpeg messages
       if (output.includes('Stream mapping') || output.includes('Press [q]')) {
-        logger.debug('FFmpeg RTP info', { streamId, output: output.substring(0, 300) })
+        logger.debug('FFmpeg WHIP info', { streamId, output: output.substring(0, 300) })
       }
       // Log SRT connection messages
       if (output.includes('SRT') || output.includes('srt://') || output.includes('Connection')) {
@@ -685,7 +865,7 @@ class WebRTCProxy {
       // Log errors and warnings
       if (output.includes('error') || output.includes('Error') || output.includes('failed') ||
           output.includes('Failed') || output.includes('warning') || output.includes('Warning')) {
-        logger.warn('FFmpeg RTP error/warning', { streamId, output: output.substring(0, 500) })
+        logger.warn('FFmpeg WHIP error/warning', { streamId, output: output.substring(0, 500) })
       }
       // Log "no data" messages which indicate connection issues
       if (output.includes('without any data') || output.includes('No data') ||
@@ -695,42 +875,37 @@ class WebRTCProxy {
     })
 
     ffmpegProcess.on('error', (err) => {
-      logger.error('FFmpeg RTP process error', { streamId, error: err.message })
+      logger.error('FFmpeg WHIP process error', { streamId, error: err.message })
       this.stopProxy(streamId)
     })
 
     ffmpegProcess.on('exit', (code, signal) => {
       if (code !== 0 && code !== null) {
         // Log full stderr output on error for debugging
-        // Get the last 3000 chars to capture more context
         const errorOutput = stderrBuffer.length > 0
           ? stderrBuffer.substring(Math.max(0, stderrBuffer.length - 3000))
           : 'No stderr output captured'
-        // Log the full error output (up to 2000 chars) for better debugging
-        logger.error('FFmpeg RTP process exited with error', {
+        logger.error('FFmpeg WHIP process exited with error', {
           streamId,
           code,
           signal,
           srtUrl,
-          videoPort,
-          errorOutput: errorOutput.substring(0, 2000), // Increased to 2000 chars
-          // Also log the full command for debugging
+          whipUrl,
+          errorOutput: errorOutput.substring(0, 2000),
           ffmpegCommand: ffmpegArgs.join(' ')
         })
         // Clean up the proxy on error
         this.stopProxy(streamId)
       } else if (code === 0) {
-        logger.debug('FFmpeg RTP process exited normally', { streamId })
+        logger.debug('FFmpeg WHIP process exited normally', { streamId })
       }
     })
 
     const signalingUrl = `ws://127.0.0.1:${this.port}?streamId=${streamId}`
-    logger.info('RTP proxy started for WebRTC', {
+    logger.info('WHIP proxy started for WebRTC', {
       streamId,
       signalingUrl,
-      videoPort,
-      audioPort: hasAudio ? audioPort : 'disabled',
-      sdpPath,
+      whipUrl,
       hasAudio
     })
     return signalingUrl
@@ -740,13 +915,22 @@ class WebRTCProxy {
    * Stop WebRTC proxy for a stream
    * @param {string} streamId - Stream ID
    */
-  stopProxy (streamId) {
+  async stopProxy (streamId) {
     const proxy = this.activeProxies.get(streamId)
     if (!proxy) {
       return
     }
 
     logger.debug('Stopping WebRTC proxy', streamId)
+
+    // Close browser PeerConnection
+    if (proxy.browserPC) {
+      try {
+        proxy.browserPC.close()
+      } catch (err) {
+        logger.warn('Error closing browser PeerConnection', { streamId, error: err.message })
+      }
+    }
 
     // Close WebSocket connection
     if (proxy.ws) {
@@ -756,6 +940,9 @@ class WebRTCProxy {
         logger.warn('Error closing WebSocket', { streamId, error: err.message })
       }
     }
+
+    // Remove from WHIP server
+    await this.whipServer.removeStream(streamId)
 
     // Kill FFmpeg process
     if (proxy.process && !proxy.process.killed) {
@@ -787,16 +974,16 @@ class WebRTCProxy {
   /**
    * Stop all active proxies
    */
-  stopAll () {
+  async stopAll () {
     for (const streamId of this.activeProxies.keys()) {
-      this.stopProxy(streamId)
+      await this.stopProxy(streamId)
     }
   }
 
   /**
-   * Stop signaling server
+   * Stop signaling server and WHIP server
    */
-  stopSignalingServer () {
+  async stopSignalingServer () {
     if (this.wss) {
       this.wss.close()
       this.wss = null
@@ -805,8 +992,10 @@ class WebRTCProxy {
       this.server.close()
       this.server = null
     }
+    await this.whipServer.stop()
     this.port = 0
-    logger.debug('WebRTC signaling server stopped')
+    this.whipPort = 0
+    logger.debug('WebRTC signaling server and WHIP server stopped')
   }
 }
 

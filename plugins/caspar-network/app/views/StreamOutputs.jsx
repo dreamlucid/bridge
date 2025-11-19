@@ -11,10 +11,11 @@ export const StreamOutputs = () => {
   const [formData, setFormData] = React.useState({
     serverId: '',
     channel: '',
+    index: '',
     srtUrl: '',
     encodingOptions: {
       format: 'mpegts',
-      codec: 'h264_nvenc',
+      codec: 'h264_vaapi',
       preset: 'p4',
       tune: 'll',
       bitrate: '6000k',
@@ -96,6 +97,11 @@ export const StreamOutputs = () => {
     if (!formData.channel || isNaN(formData.channel) || parseInt(formData.channel) < 1) {
       newErrors.channel = 'Valid channel number is required'
     }
+    if (formData.index === '' || formData.index == null) {
+      newErrors.index = 'Index is required (e.g., 500)'
+    } else if (isNaN(formData.index) || parseInt(formData.index) < 0) {
+      newErrors.index = 'Index must be a valid non-negative number'
+    }
     if (!formData.srtUrl || !formData.srtUrl.trim()) {
       newErrors.srtUrl = 'SRT URL is required'
     } else if (!formData.srtUrl.startsWith('srt://')) {
@@ -117,6 +123,7 @@ export const StreamOutputs = () => {
         'caspar-network.addOutputStream',
         formData.serverId,
         parseInt(formData.channel),
+        parseInt(formData.index),
         formData.srtUrl.trim(),
         formData.encodingOptions
       )
@@ -124,6 +131,7 @@ export const StreamOutputs = () => {
       setFormData(prev => ({
         serverId: '',
         channel: '',
+        index: '',
         srtUrl: '',
         encodingOptions: prev.encodingOptions,
         showAdvanced: false
@@ -140,16 +148,24 @@ export const StreamOutputs = () => {
   async function handleStart (streamId) {
     try {
       await bridge.commands.executeCommand('caspar-network.startOutputStream', streamId)
+      // Reload streams to reflect updated state
+      const streamList = await bridge.commands.executeCommand('caspar-network.listStreams')
+      setStreams(streamList?.outputs || [])
     } catch (err) {
       console.error('Error starting stream:', err)
+      alert(`Error starting stream: ${err.message || err}`)
     }
   }
 
   async function handleStop (streamId) {
     try {
       await bridge.commands.executeCommand('caspar-network.stopOutputStream', streamId)
+      // Reload streams to reflect updated state
+      const streamList = await bridge.commands.executeCommand('caspar-network.listStreams')
+      setStreams(streamList?.outputs || [])
     } catch (err) {
       console.error('Error stopping stream:', err)
+      alert(`Error stopping stream: ${err.message || err}`)
     }
   }
 
@@ -159,16 +175,24 @@ export const StreamOutputs = () => {
     }
     try {
       await bridge.commands.executeCommand('caspar-network.removeOutputStream', streamId)
+      // Reload streams to reflect updated state
+      const streamList = await bridge.commands.executeCommand('caspar-network.listStreams')
+      setStreams(streamList?.outputs || [])
     } catch (err) {
       console.error('Error removing stream:', err)
+      alert(`Error removing stream: ${err.message || err}`)
     }
   }
 
   async function handleRefresh (streamId) {
     try {
       await bridge.commands.executeCommand('caspar-network.refreshStreamStatus', streamId)
+      // Reload streams to reflect updated state
+      const streamList = await bridge.commands.executeCommand('caspar-network.listStreams')
+      setStreams(streamList?.outputs || [])
     } catch (err) {
       console.error('Error refreshing stream status:', err)
+      alert(`Error refreshing stream status: ${err.message || err}`)
     }
   }
 
@@ -177,8 +201,12 @@ export const StreamOutputs = () => {
       for (const stream of streams) {
         await bridge.commands.executeCommand('caspar-network.refreshStreamStatus', stream.id)
       }
+      // Reload streams to reflect updated state
+      const streamList = await bridge.commands.executeCommand('caspar-network.listStreams')
+      setStreams(streamList?.outputs || [])
     } catch (err) {
       console.error('Error refreshing streams:', err)
+      alert(`Error refreshing streams: ${err.message || err}`)
     }
   }
 
@@ -238,6 +266,19 @@ export const StreamOutputs = () => {
         </div>
 
         <div className='StreamForm-field'>
+          <label className='StreamForm-label'>Index</label>
+          <input
+            type='number'
+            className='StreamForm-input StreamForm-input--small'
+            value={formData.index}
+            onChange={e => handleInputChange('index', e.target.value)}
+            placeholder='500'
+            min='0'
+          />
+          {errors.index && <div className='StreamForm-error'>{errors.index}</div>}
+        </div>
+
+        <div className='StreamForm-field'>
           <label className='StreamForm-label'>SRT Listener URL</label>
           <input
             type='text'
@@ -279,9 +320,11 @@ export const StreamOutputs = () => {
                 value={formData.encodingOptions.codec}
                 onChange={e => handleEncodingOptionChange('codec', e.target.value)}
               >
-                <option value='h264_nvenc'>h264_nvenc</option>
-                <option value='h264'>h264</option>
-                <option value='libx264'>libx264</option>
+                <option value='h264_vaapi'>h264_vaapi (VAAPI GPU)</option>
+                <option value='h264_nvenc'>h264_nvenc (NVIDIA GPU)</option>
+                <option value='h264_v4l2m2m'>h264_v4l2m2m (V4L2 GPU)</option>
+                <option value='libx264'>libx264 (CPU)</option>
+                <option value='h264'>h264 (Auto)</option>
               </select>
             </div>
 
@@ -406,6 +449,9 @@ export const StreamOutputs = () => {
                   <div className='StreamList-item-header'>
                     <div className='StreamList-item-title'>
                       Channel {stream.channel}
+                      {stream.index != null
+                        ? `-${stream.index}`
+                        : ''}
                       {stream.streamIndex != null
                         ? `, Stream ${stream.streamIndex}`
                         : ''}

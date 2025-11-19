@@ -20,7 +20,7 @@ A Bridge plugin for managing SRT input and output streams for CasparCG.
 
 ### Output Streams
 
-- `caspar-network.addOutputStream(serverId, channel, srtUrl, encodingOptions)` - Add a new output stream
+- `caspar-network.addOutputStream(serverId, channel, index, srtUrl, encodingOptions)` - Add a new output stream
 - `caspar-network.removeOutputStream(streamId)` - Remove an output stream
 - `caspar-network.startOutputStream(streamId)` - Start an output stream
 - `caspar-network.stopOutputStream(streamId)` - Stop an output stream

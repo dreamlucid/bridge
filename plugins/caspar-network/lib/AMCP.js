@@ -19,14 +19,15 @@ exports.playSrtStream = (channel, layer, srtUrl, loop = false) => {
 /**
  * Build ADD STREAM command for SRT output
  * @param { Number } channel - CasparCG channel
+ * @param { Number } index - Stream index
  * @param { String } srtUrl - SRT listener URL
  * @param { Object } encodingOptions - Encoding parameters
  * @returns { String } AMCP command string
  */
-exports.addStream = (channel, srtUrl, encodingOptions = {}) => {
+exports.addStream = (channel, index, srtUrl, encodingOptions = {}) => {
   const {
     format = 'mpegts',
-    codec = 'h264_nvenc',
+    codec = 'h264_vaapi', // Default to VAAPI (available in custom FFmpeg build)
     preset = 'p4',
     tune = 'll',
     bitrate = '6000k',
@@ -37,11 +38,37 @@ exports.addStream = (channel, srtUrl, encodingOptions = {}) => {
     audio = false
   } = encodingOptions
 
-  let cmd = `ADD ${channel} STREAM "${srtUrl}"`
+  let cmd = `ADD ${channel}-${index} STREAM "${srtUrl}"`
   cmd += ` -format ${format}`
   cmd += ` -codec:v ${codec}`
-  cmd += ` -preset:v ${preset}`
-  cmd += ` -tune:v ${tune}`
+
+  // Encoder-specific options (syntax varies by encoder)
+  if (codec === 'h264_nvenc' || codec === 'hevc_nvenc') {
+    // NVIDIA encoder - use without :v suffix for newer FFmpeg
+    cmd += ` -preset ${preset}`
+    cmd += ` -tune ${tune}`
+    cmd += ` -rc vbr`
+  } else if (codec === 'h264_vaapi' || codec === 'hevc_vaapi') {
+    // VAAPI encoder - different options
+    cmd += ` -rc_mode VBR`
+    cmd += ` -quality 4`
+    cmd += ` -async_depth 4`
+  } else if (codec === 'h264_v4l2m2m') {
+    // V4L2 encoder - minimal options
+    cmd += ` -num_capture_buffers 4`
+  } else if (codec === 'libx264') {
+    // CPU encoder
+    cmd += ` -preset ultrafast`
+    cmd += ` -tune zerolatency`
+  } else {
+    // Generic fallback - try old syntax for compatibility
+    cmd += ` -preset:v ${preset}`
+    if (tune) {
+      cmd += ` -tune:v ${tune}`
+    }
+  }
+
+  // Common options (work for all encoders)
   cmd += ` -b:v ${bitrate}`
   cmd += ` -maxrate:v ${maxrate}`
   cmd += ` -bufsize:v ${bufsize}`
@@ -57,11 +84,11 @@ exports.addStream = (channel, srtUrl, encodingOptions = {}) => {
 /**
  * Build REMOVE STREAM command
  * @param { Number } channel - CasparCG channel
- * @param { Number } streamIndex - Stream index to remove
+ * @param { Number } index - Stream index to remove
  * @returns { String } AMCP command string
  */
-exports.removeStream = (channel, streamIndex) => {
-  return `REMOVE ${channel} STREAM ${streamIndex}`
+exports.removeStream = (channel, index) => {
+  return `REMOVE ${channel}-${index}`
 }
 
 /**

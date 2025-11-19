@@ -23,6 +23,7 @@ const uuid = require('uuid')
  *   id: String,
  *   serverId: String,
  *   channel: Number,
+ *   index: Number,
  *   streamIndex: Number | null,
  *   srtUrl: String,
  *   encodingOptions: Object,
@@ -139,17 +140,19 @@ class StreamManager {
    * Add an output stream
    * @param { String } serverId - CasparCG server ID
    * @param { Number } channel - Channel number
+   * @param { Number } index - Stream index
    * @param { String } srtUrl - SRT listener URL
    * @param { Object } encodingOptions - Encoding parameters
    * @returns { String } Stream ID
    */
-  addOutputStream (serverId, channel, srtUrl, encodingOptions = {}) {
+  addOutputStream (serverId, channel, index, srtUrl, encodingOptions = {}) {
     const id = uuid.v4()
     const stream = {
       id,
       serverId,
       channel,
-      streamIndex: null, // Will be set after ADD command succeeds
+      index,
+      streamIndex: null, // Will be set after ADD command succeeds (different from index)
       srtUrl,
       encodingOptions,
       status: 'stopped',
