@@ -8,4 +8,3 @@ const StreamManager = require('./StreamManager')
 const streamManager = new StreamManager()
 
 module.exports = streamManager
-
