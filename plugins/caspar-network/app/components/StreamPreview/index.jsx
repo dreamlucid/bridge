@@ -195,7 +195,6 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
 
                 if (videoRef.current) {
                   videoRef.current.srcObject = stream
-                  
                   // Clear the timeout since we've set srcObject
                   if (trackTimeoutRef.current) {
                     clearTimeout(trackTimeoutRef.current)
