@@ -53,5 +53,3 @@ class FileBasedRegistry {
 }
 
 module.exports = new FileBasedRegistry()
-
-

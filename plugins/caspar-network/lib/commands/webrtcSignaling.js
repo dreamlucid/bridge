@@ -5,11 +5,13 @@
 /**
  * @type { import('../../api').Api }
  */
+// eslint-disable-next-line no-unused-vars
 const bridge = require('bridge')
 
 const webRTCPreviewManager = require('../webRTCPreviewManagerInstance')
 
 const Logger = require('../../../../lib/Logger')
+// eslint-disable-next-line no-unused-vars
 const logger = new Logger({ name: 'CasparNetworkPlugin' })
 
 /**
@@ -73,4 +75,3 @@ module.exports = {
   connectWebRtcTransport,
   createConsumer
 }
-

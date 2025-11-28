@@ -138,7 +138,7 @@ class WebRTCPreviewManager {
     // Log FFmpeg output for debugging
     let ffmpegErrorOutput = ''
     let ffmpegStdoutOutput = ''
-    
+
     ffmpegProcess.stderr.on('data', (data) => {
       const output = data.toString()
       ffmpegErrorOutput += output
