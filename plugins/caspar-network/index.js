@@ -15,7 +15,6 @@ const logger = new Logger({ name: 'CasparNetworkPlugin' })
 
 const StreamMonitor = require('./lib/StreamMonitor')
 const StreamProxy = require('./lib/StreamProxy')
-const WebRTCProxy = require('./lib/WebRTCProxy')
 
 // Import commands to register them
 require('./lib/commands')
@@ -26,13 +25,9 @@ const streamMonitor = new StreamMonitor()
 // Create singleton stream proxy (HLS - kept for backward compatibility)
 const streamProxy = new StreamProxy()
 
-// Create singleton WebRTC proxy (new default for preview)
-const webrtcProxy = new WebRTCProxy()
-
 // Export for use in commands
 exports.streamMonitor = streamMonitor
 exports.streamProxy = streamProxy
-exports.webrtcProxy = webrtcProxy
 
 /**
  * Initialize default settings if not set
@@ -135,9 +130,6 @@ exports.activate = async () => {
 
   // Start stream monitoring
   streamMonitor.start()
-
-  // Start WebRTC signaling server
-  await webrtcProxy.startSignalingServer()
 
   // Register widgets
   bridge.widgets.registerWidget({

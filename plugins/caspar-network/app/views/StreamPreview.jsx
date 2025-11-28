@@ -19,11 +19,7 @@ export const StreamPreview = () => {
         // Only show output streams for preview (input streams don't have preview)
         const outputStreams = (streamList?.outputs || []).map(s => ({ ...s, type: 'output' }))
         setStreams(outputStreams)
-        // Auto-select first active output stream if available
-        const activeStream = outputStreams.find(s => s.status === 'active')
-        if (activeStream && !selectedStreamId) {
-          setSelectedStreamId(activeStream.id)
-        }
+        // Preview will only start when user explicitly selects a stream from the dropdown
       } catch (err) {
         console.error('Error loading streams:', err)
       }

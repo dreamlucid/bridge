@@ -3,12 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 import React, { useEffect, useRef, useState } from 'react'
+import * as mediasoupClient from 'mediasoup-client'
 import bridge from 'bridge'
 
 import './style.css'
 
 /**
- * StreamPreview component for displaying WebRTC video streams (low-latency real-time preview)
+ * StreamPreview component for displaying WebRTC video streams using mediasoup (low-latency real-time preview)
  * @param {Object} props
  * @param {string} props.streamId - Stream ID
  * @param {boolean} [props.autoPlay=true] - Auto-play the video
@@ -17,7 +18,9 @@ import './style.css'
  */
 export const StreamPreview = ({ streamId, autoPlay = true, controls = true, muted = true }) => {
   const videoRef = useRef(null)
-  const pcRef = useRef(null)
+  const deviceRef = useRef(null)
+  const transportRef = useRef(null)
+  const consumerRef = useRef(null)
   const wsRef = useRef(null)
   const trackTimeoutRef = useRef(null)
   const [error, setError] = useState(null)
@@ -37,12 +40,18 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
         setError(null)
         setStatus('connecting')
 
-        // Start WebRTC proxy and get signaling URL
-        const signalingUrl = await bridge.commands.executeCommand('caspar-network.startPreview', streamId)
+        // Start WebRTC proxy and get signaling URL (now returns relative path)
+        const signalingPath = await bridge.commands.executeCommand('caspar-network.startPreview', streamId)
         if (!isMounted) return
 
-        // Connect to WebRTC signaling server
-        await connectWebRTC(signalingUrl)
+        // Construct full WebSocket URL from relative path using current location
+        // signalingPath is like: /api/v1/webrtc?streamId=...
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+        const host = window.location.host
+        const finalSignalingUrl = `${protocol}//${host}${signalingPath}`
+
+        // Connect to WebRTC signaling server using mediasoup
+        await connectMediasoup(finalSignalingUrl)
       } catch (err) {
         if (!isMounted) return
         console.error('Error starting WebRTC preview:', err)
@@ -52,99 +61,15 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
       }
     }
 
-    async function connectWebRTC (signalingUrl) {
+    async function connectMediasoup (signalingUrl) {
+      // Store transport connection promise resolver (accessible in onmessage)
+      let transportConnectResolver = null
+      let transportConnectRejecter = null
+
       try {
-        // Create RTCPeerConnection
-        const pc = new RTCPeerConnection({
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
-        })
-
-        pcRef.current = pc
-
-        // Handle incoming stream
-        pc.ontrack = (event) => {
-          console.log('Received track event:', event)
-          console.log('Track kind:', event.track.kind)
-          console.log('Streams:', event.streams)
-          if (videoRef.current && event.streams[0]) {
-            videoRef.current.srcObject = event.streams[0]
-            setStatus('connected')
-            setLoading(false)
-            if (autoPlay) {
-              videoRef.current.play().catch(err => {
-                console.error('Error playing video:', err)
-                setError('Autoplay blocked. Click play to start.')
-                setLoading(false)
-              })
-            }
-          } else if (event.track) {
-            // Handle case where track exists but no stream
-            console.log('Track received but no stream, creating MediaStream')
-            const stream = new MediaStream([event.track])
-            if (videoRef.current) {
-              videoRef.current.srcObject = stream
-              setStatus('connected')
-              setLoading(false)
-              if (autoPlay) {
-                videoRef.current.play().catch(err => {
-                  console.error('Error playing video:', err)
-                  setError('Autoplay blocked. Click play to start.')
-                  setLoading(false)
-                })
-              }
-            }
-          }
-        }
-
-        pc.onicecandidate = (event) => {
-          if (event.candidate && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({
-              type: 'ice-candidate',
-              candidate: event.candidate
-            }))
-          }
-        }
-
-        pc.oniceconnectionstatechange = () => {
-          const state = pc.iceConnectionState
-          console.log('ICE connection state changed:', state)
-          setStatus(state)
-          if (state === 'failed' || state === 'disconnected') {
-            setError(`Connection ${state}`)
-            setLoading(false)
-          } else if (state === 'connected' || state === 'completed') {
-            // Connection established, but we still need to wait for tracks
-            console.log('ICE connection established, waiting for tracks...')
-          }
-        }
-
-        pc.onconnectionstatechange = () => {
-          const state = pc.connectionState
-          console.log('PeerConnection state changed:', state)
-          if (state === 'failed' || state === 'disconnected') {
-            setError(`PeerConnection ${state}`)
-            setLoading(false)
-          }
-        }
-
-        // Add timeout to detect if tracks never arrive
-        trackTimeoutRef.current = setTimeout(() => {
-          if (isMounted && loading && !videoRef.current?.srcObject) {
-            console.warn('No tracks received within 10 seconds')
-            setError('No video track received. The stream may not be available.')
-            setLoading(false)
-          }
-        }, 10000)
-
-        pc.onerror = (err) => {
-          console.error('WebRTC error:', err)
-          setError('WebRTC connection error')
-          setLoading(false)
-          setStatus('error')
-        }
+        // Create mediasoup Device
+        const device = new mediasoupClient.Device()
+        deviceRef.current = device
 
         // Connect to signaling server
         const ws = new WebSocket(signalingUrl)
@@ -152,33 +77,174 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
 
         ws.onopen = async () => {
           setStatus('signaling')
-          // Create offer
-          const offer = await pc.createOffer({
-            offerToReceiveAudio: true,
-            offerToReceiveVideo: true
-          })
-
-          await pc.setLocalDescription(offer)
-
-          // Send offer to signaling server
-          ws.send(JSON.stringify({
-            type: 'offer',
-            offer
-          }))
+          try {
+            // Step 1: Get router RTP capabilities
+            ws.send(JSON.stringify({
+              type: 'getRouterRtpCapabilities'
+            }))
+          } catch (err) {
+            console.error('Error in WebSocket onopen:', err)
+            setError('Failed to initialize connection')
+            setLoading(false)
+            setStatus('error')
+          }
         }
 
         ws.onmessage = async (event) => {
           try {
             const data = JSON.parse(event.data)
 
-            if (data.type === 'answer' && pcRef.current) {
-              await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer))
-            } else if (data.type === 'ice-candidate' && pcRef.current) {
-              await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate))
+            if (data.type === 'error') {
+              console.error('Server error:', data.message)
+              setError(data.message || 'Server error')
+              setLoading(false)
+              setStatus('error')
+              return
+            }
+
+            if (data.type === 'routerRtpCapabilities') {
+              // Step 2: Load device with router RTP capabilities
+              await device.load({ routerRtpCapabilities: data.data })
+              console.log('Device loaded with router RTP capabilities')
+
+              // Step 3: Create WebRTC transport
+              ws.send(JSON.stringify({
+                type: 'createWebRtcTransport',
+                streamId
+              }))
+            } else if (data.type === 'webRtcTransportCreated') {
+              // Step 4: Create receive transport
+              const transport = device.createRecvTransport(data.data)
+              transportRef.current = transport
+
+              transport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+                try {
+                  // Step 5: Connect transport
+                  // Set up promise to wait for connection confirmation
+                  const connectPromise = new Promise((resolve, reject) => {
+                    transportConnectResolver = resolve
+                    transportConnectRejecter = reject
+                  })
+
+                  ws.send(JSON.stringify({
+                    type: 'connectWebRtcTransport',
+                    streamId,
+                    dtlsParameters
+                  }))
+
+                  // Wait for connection confirmation (handled in onmessage)
+                  await connectPromise
+                  callback()
+                } catch (err) {
+                  if (transportConnectRejecter) {
+                    transportConnectRejecter(err)
+                    transportConnectResolver = null
+                    transportConnectRejecter = null
+                  }
+                  errback(err)
+                }
+              })
+
+              transport.on('connectionstatechange', (state) => {
+                console.log('Transport connection state:', state)
+                setStatus(state)
+                if (state === 'failed' || state === 'disconnected') {
+                  setError(`Transport ${state}`)
+                  setLoading(false)
+                } else if (state === 'connected') {
+                  // Step 6: Create consumer after transport is connected
+                  ws.send(JSON.stringify({
+                    type: 'createConsumer',
+                    streamId,
+                    transportId: data.data.id,
+                    rtpCapabilities: device.rtpCapabilities
+                  }))
+                }
+              })
+
+              // Handle transport errors
+              transport.on('error', (error) => {
+                console.error('Transport error:', error)
+                setError('Transport error: ' + (error.message || 'Unknown error'))
+                setLoading(false)
+                setStatus('error')
+              })
+            } else if (data.type === 'webRtcTransportConnected') {
+              // Transport connected - resolve the connect promise
+              if (transportConnectResolver) {
+                transportConnectResolver()
+                transportConnectResolver = null
+                transportConnectRejecter = null
+              } else {
+                console.log('Transport connected (no resolver set)')
+              }
+            } else if (data.type === 'consumerCreated') {
+              // Step 7: Consume the stream
+              try {
+                const consumer = await transportRef.current.consume({
+                  id: data.data.id,
+                  producerId: data.data.producerId,
+                  kind: data.data.kind,
+                  rtpParameters: data.data.rtpParameters
+                })
+
+                consumerRef.current = consumer
+
+                // Create MediaStream from consumer track
+                const stream = new MediaStream([consumer.track])
+
+                if (videoRef.current) {
+                  videoRef.current.srcObject = stream
+                  
+                  // Clear the timeout since we've set srcObject
+                  if (trackTimeoutRef.current) {
+                    clearTimeout(trackTimeoutRef.current)
+                    trackTimeoutRef.current = null
+                  }
+
+                  setStatus('connected')
+                  setLoading(false)
+
+                  if (autoPlay) {
+                    videoRef.current.play().catch(err => {
+                      console.error('Error playing video:', err)
+                      setError('Autoplay blocked. Click play to start.')
+                      setLoading(false)
+                    })
+                  }
+
+                  // Monitor track state to detect if video actually starts
+                  consumer.track.onmute = () => {
+                    console.log('Consumer track muted')
+                  }
+
+                  consumer.track.onunmute = () => {
+                    console.log('Consumer track unmuted')
+                  }
+                }
+
+                // Handle consumer events
+                consumer.on('transportclose', () => {
+                  console.log('Consumer transport closed')
+                  setStatus('disconnected')
+                  setLoading(false)
+                })
+
+                consumer.track.onended = () => {
+                  console.log('Consumer track ended')
+                  setStatus('disconnected')
+                  setLoading(false)
+                }
+              } catch (err) {
+                console.error('Error consuming stream:', err)
+                setError('Failed to consume stream: ' + (err.message || 'Unknown error'))
+                setLoading(false)
+                setStatus('error')
+              }
             }
           } catch (err) {
             console.error('Error handling signaling message:', err)
-            setError('Signaling error')
+            setError('Signaling error: ' + (err.message || 'Unknown error'))
             setLoading(false)
           }
         }
@@ -194,9 +260,18 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
           setStatus('disconnected')
           cleanup()
         }
+
+        // Add timeout to detect if connection never establishes
+        trackTimeoutRef.current = setTimeout(() => {
+          if (isMounted && loading && !videoRef.current?.srcObject) {
+            console.warn('No video received within 15 seconds')
+            setError('No video received. The stream may not be available.')
+            setLoading(false)
+          }
+        }, 15000)
       } catch (err) {
-        console.error('WebRTC connection error:', err)
-        setError(err.message || 'Failed to connect WebRTC')
+        console.error('Mediasoup connection error:', err)
+        setError(err.message || 'Failed to connect')
         setLoading(false)
         setStatus('error')
       }
@@ -207,9 +282,16 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
         clearTimeout(trackTimeoutRef.current)
         trackTimeoutRef.current = null
       }
-      if (pcRef.current) {
-        pcRef.current.close()
-        pcRef.current = null
+      if (consumerRef.current) {
+        consumerRef.current.close()
+        consumerRef.current = null
+      }
+      if (transportRef.current) {
+        transportRef.current.close()
+        transportRef.current = null
+      }
+      if (deviceRef.current) {
+        deviceRef.current = null
       }
       if (wsRef.current) {
         wsRef.current.close()

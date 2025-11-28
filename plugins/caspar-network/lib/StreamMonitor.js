@@ -6,6 +6,7 @@ const bridge = require('bridge')
 const manifest = require('../package.json')
 const paths = require('./paths')
 const AMCP = require('./AMCP')
+const { extractStreamIndexFromInfo } = require('./streamHelpers')
 
 const Logger = require('../../../lib/Logger')
 const logger = new Logger({ name: 'CasparNetworkPlugin' })
@@ -18,6 +19,14 @@ class StreamMonitor {
     this.intervals = new Map()
     this.isMonitoring = false
     this.pollInterval = 5000 // 5 seconds
+  }
+
+  /**
+   * Check if monitoring is currently running
+   * @returns {Boolean}
+   */
+  isRunning () {
+    return this.isMonitoring
   }
 
   /**
@@ -179,9 +188,28 @@ class StreamMonitor {
 
         // If we have a stream index, check if it's mentioned in the response
         if (stream.streamIndex != null) {
-          // Look for the stream index in the response
-          const streamIndexPattern = new RegExp(`STREAM[\\s:]+${stream.streamIndex}`, 'i')
-          if (streamIndexPattern.test(responseData)) {
+          // First, try to extract stream index using the proper extraction function
+          // This handles XML responses with port_500, index="500", etc.
+          const foundStreamIndex = extractStreamIndexFromInfo(response.data, stream.srtUrl)
+
+          // Also check if the stream index appears in the response in various formats
+          // This handles cases where URL matching might be too strict
+          const streamIndexStr = stream.streamIndex.toString()
+          const streamIndexPatterns = [
+            // XML port format: port_500, port-500, port500
+            new RegExp(`port[_-]?${streamIndexStr}`, 'i'),
+            // XML attribute format: index="500" or index='500'
+            new RegExp(`index\\s*=\\s*["']?${streamIndexStr}["']?`, 'i'),
+            // Text format: STREAM 500, STREAM: 500, STREAM 500:
+            new RegExp(`STREAM[\\s:]+${streamIndexStr}`, 'i'),
+            // Direct number match (with word boundaries to avoid partial matches)
+            new RegExp(`\\b${streamIndexStr}\\b`)
+          ]
+
+          const streamIndexFound = foundStreamIndex === stream.streamIndex ||
+            streamIndexPatterns.some(pattern => pattern.test(responseData))
+
+          if (streamIndexFound) {
             // Stream is found in response, it's active
             // If it was in error state, clear it
             const streams = await bridge.state.get(paths.STATE_STREAMS_PATH) || { inputs: [], outputs: [] }
@@ -194,7 +222,13 @@ class StreamMonitor {
             await this.handleStreamError(stream.id, 'output', 'Stream has an error in CasparCG response')
           } else {
             // Stream index not found but response is valid - might be stopped
-            logger.debug('Output stream check: stream index not found in response', { streamId: stream.id, streamIndex: stream.streamIndex })
+            // Log with more details for debugging
+            logger.debug('Output stream check: stream index not found in response', {
+              streamId: stream.id,
+              streamIndex: stream.streamIndex,
+              foundStreamIndex,
+              responseData: responseData.substring(0, 500) // Log first 500 chars for debugging
+            })
           }
         } else {
           // No stream index yet, but we got a valid response
