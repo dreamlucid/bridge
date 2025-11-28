@@ -15,6 +15,9 @@ const logger = new Logger({ name: 'CasparNetworkPlugin' })
 
 const StreamMonitor = require('./lib/StreamMonitor')
 const StreamProxy = require('./lib/StreamProxy')
+const WebRTCSignalingServer = require('./lib/WebRTCSignalingServer')
+const signalingRegistry = require('./lib/WebRTCSignalingRegistry')
+const fileBasedRegistry = require('./lib/FileBasedRegistry')
 
 // Import commands to register them
 require('./lib/commands')
@@ -25,9 +28,17 @@ const streamMonitor = new StreamMonitor()
 // Create singleton stream proxy (HLS - kept for backward compatibility)
 const streamProxy = new StreamProxy()
 
+// Create WebRTC signaling server
+const webRTCSignalingServer = new WebRTCSignalingServer()
+
+// Register signaling server in registry so server.js can access it
+// Uses process object which is shared across worker threads
+signalingRegistry.setSignalingServer(webRTCSignalingServer)
+
 // Export for use in commands
 exports.streamMonitor = streamMonitor
 exports.streamProxy = streamProxy
+exports.webRTCSignalingServer = webRTCSignalingServer
 
 /**
  * Initialize default settings if not set
@@ -130,6 +141,28 @@ exports.activate = async () => {
 
   // Start stream monitoring
   streamMonitor.start()
+
+  // Initialize WebRTC signaling server
+  // The server upgrade handler in lib/server.js will handle WebSocket upgrades
+  // We need to initialize the WebSocket server here
+  try {
+    // Initialize the WebSocket server (noServer: true means we handle upgrades manually)
+    // The actual server instance will be accessed via the upgrade handler in server.js
+    webRTCSignalingServer.initialize()
+
+    // Re-register the signaling server after initialization to ensure wss is set
+    // This ensures the server.js can access the fully initialized server with wss
+    signalingRegistry.setSignalingServer(webRTCSignalingServer)
+    // Also register in file-based registry for cross-thread access
+    fileBasedRegistry.setSignalingServer(webRTCSignalingServer)
+
+    logger.debug('WebRTC signaling server initialized and registered', {
+      hasServer: !!webRTCSignalingServer,
+      hasWss: !!webRTCSignalingServer.wss
+    })
+  } catch (err) {
+    logger.warn('Could not initialize WebRTC signaling server', { error: err.message })
+  }
 
   // Register widgets
   bridge.widgets.registerWidget({

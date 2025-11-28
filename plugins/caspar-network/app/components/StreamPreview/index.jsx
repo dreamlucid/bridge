@@ -46,9 +46,16 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
 
         // Construct full WebSocket URL from relative path using current location
         // signalingPath is like: /api/v1/webrtc?streamId=...
+        // Add workspace ID if not already in the path
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
         const host = window.location.host
-        const finalSignalingUrl = `${protocol}//${host}${signalingPath}`
+        let finalSignalingUrl = `${protocol}//${host}${signalingPath}`
+
+        // Add workspace ID if available and not already in URL
+        const workspaceId = window.APP?.workspace
+        if (workspaceId && !signalingPath.includes('workspace=')) {
+          finalSignalingUrl += `&workspace=${encodeURIComponent(workspaceId)}`
+        }
 
         // Connect to WebRTC signaling server using mediasoup
         await connectMediasoup(finalSignalingUrl)

@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 const mediasoup = require('mediasoup')
-const RTPParser = require('./RTPParser')
-const H264Depacketizer = require('./H264Depacketizer')
 
 const Logger = require('../../../lib/Logger')
 const logger = new Logger({ name: 'CasparNetworkPlugin' })
@@ -12,10 +10,10 @@ const logger = new Logger({ name: 'CasparNetworkPlugin' })
 /**
  * Mediasoup Bridge - Bridges RTP stream to WebRTC using mediasoup
  *
- * Pipeline: RTP Packets → Parser → Depacketizer → PlainTransport → Router → WebRTCTransport → Browser
+ * Pipeline: SRT → FFmpeg (SRT to RTP) → PlainTransport → Router → WebRTCTransport → Browser
  *
- * This implementation uses mediasoup's PlainTransport to accept RTP packets directly,
- * solving the frame pushing limitation of the `wrtc` package.
+ * This implementation uses mediasoup's PlainTransport to accept RTP packets directly from FFmpeg.
+ * FFmpeg converts the SRT stream to RTP, which is then forwarded to mediasoup's PlainTransport.
  */
 class MediasoupBridge {
   constructor (options = {}) {
@@ -29,9 +27,6 @@ class MediasoupBridge {
     this.producer = null
     this.webrtcTransports = new Map() // Map<streamId, WebRTCTransport>
     this.consumers = new Map() // Map<streamId, Consumer>
-
-    this.rtpParser = new RTPParser()
-    this.depacketizer = new H264Depacketizer()
 
     this.isActive = false
   }
@@ -293,10 +288,11 @@ class MediasoupBridge {
 
   /**
    * Process RTP packet and forward to PlainTransport
-   * @param {Object} rtpPacket - Parsed RTP packet from RTPParser
+   * @param {Object} rtpPacket - Parsed RTP packet
+   * @deprecated This method is not used - FFmpeg sends RTP packets directly to PlainTransport via UDP
    */
   processRTPPacket (rtpPacket) {
-    // This method is currently not used - RTPReceiver forwards packets directly
+    // This method is currently not used - FFmpeg forwards packets directly
     // to PlainTransport via UDP. This method is kept for potential future use
     // if we need to process packets before forwarding.
     if (!this.plainTransport || !this.isActive) {
@@ -603,8 +599,6 @@ class MediasoupBridge {
     }
 
     this.isActive = false
-    this.depacketizer.reset()
-    this.rtpParser.resetStats()
 
     logger.debug('MediasoupBridge: Stopped')
   }
@@ -615,8 +609,6 @@ class MediasoupBridge {
    */
   getStats () {
     return {
-      rtp: this.rtpParser.getStats(),
-      depacketizer: this.depacketizer.getStats(),
       mediasoup: {
         workerAlive: this.worker !== null,
         routerActive: this.router !== null,

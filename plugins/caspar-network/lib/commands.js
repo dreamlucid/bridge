@@ -38,6 +38,49 @@ bridge.commands.registerCommand('caspar-network.startPreview', preview.startPrev
 bridge.commands.registerCommand('caspar-network.stopPreview', preview.stopPreview)
 bridge.commands.registerCommand('caspar-network.getPreviewUrl', preview.getPreviewUrl)
 
+// Register command to handle WebRTC signaling messages
+// This is called by server.js (main thread) to route messages to the plugin (worker thread)
+// Set returns: false since we handle responses via callback, not return value
+bridge.commands.registerCommand('caspar-network.handleWebRTCMessage', async (...args) => {
+  // Extract arguments - executeCommand passes them as spread args
+  // When called from main thread via workspace.api.commands.executeCommand,
+  // arguments are passed directly without transaction ID
+  const [streamId, message, wsId] = args
+
+  const Logger = require('../../../lib/Logger')
+  const logger = new Logger({ name: 'CasparNetworkPlugin' })
+
+  logger.debug('handleWebRTCMessage called', {
+    streamId,
+    messageType: message?.type,
+    wsId,
+    argsLength: args.length,
+    args: args.map((arg, i) => ({ index: i, type: typeof arg, value: typeof arg === 'string' ? arg : typeof arg === 'object' ? Object.keys(arg) : arg }))
+  })
+
+  // Validate arguments
+  if (!streamId || typeof streamId !== 'string') {
+    logger.error('Invalid streamId in handleWebRTCMessage', { streamId, args })
+    return
+  }
+
+  if (!message || typeof message !== 'object') {
+    logger.error('Invalid message in handleWebRTCMessage', { message, args })
+    return
+  }
+
+  const webRTCSignalingServer = require('../index').webRTCSignalingServer
+
+  // Handle the message and send response via command system
+  // This sends a command back to the main thread to send the WebSocket message
+  await webRTCSignalingServer.handleMessage(streamId, message, wsId, (response) => {
+    // Send response back to client via command system (main thread)
+    // Use executeRawCommand to avoid transaction ID being added
+    // executeRawCommand doesn't return a value, which is fine since we're using a callback
+    bridge.commands.executeRawCommand('_internal.sendWebRTCMessage', streamId, wsId, response)
+  })
+}, false)
+
 // Export stream manager for use in other modules
 exports.streamManager = streamManager
 
