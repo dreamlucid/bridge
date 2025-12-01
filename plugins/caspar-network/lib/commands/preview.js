@@ -49,11 +49,25 @@ async function startPreview (streamId) {
     const params = url.searchParams
     params.set('mode', 'caller') // Change to caller mode
     srtConnectionUrl = `srt://${host}:${port}?${params.toString()}`
+    logger.info('Converted SRT URL for FFmpeg connection', {
+      streamId,
+      originalUrl: stream.srtUrl,
+      connectionUrl: srtConnectionUrl
+    })
   } catch (err) {
-    logger.warn('Could not parse SRT URL, using as-is', { srtUrl: stream.srtUrl, error: err.message })
+    logger.warn('Could not parse SRT URL, using as-is', {
+      streamId,
+      srtUrl: stream.srtUrl,
+      error: err.message
+    })
   }
 
   // Start WebRTC preview
+  logger.info('Starting WebRTC preview with SRT URL', {
+    streamId,
+    srtUrl: srtConnectionUrl,
+    streamStatus: stream.status
+  })
   await webRTCPreviewManager.startPreview(streamId, srtConnectionUrl)
 
   // Register message handler with main thread's WebSocket server

@@ -106,15 +106,26 @@ class WebRTCSignalingServer {
       case 'connectWebRtcTransport': {
         // Connect WebRTC transport with client DTLS parameters
         try {
+          logger.info('WebRTCSignalingServer: Received connectWebRtcTransport message', {
+            streamId,
+            hasDtlsParameters: !!message.dtlsParameters,
+            dtlsRole: message.dtlsParameters?.role,
+            dtlsFingerprintsCount: message.dtlsParameters?.fingerprints?.length
+          })
           const { dtlsParameters } = message
+          if (!dtlsParameters) {
+            throw new Error('DTLS parameters missing')
+          }
           await bridge.connectWebRTCTransport(streamId, dtlsParameters)
+          logger.info('WebRTCSignalingServer: WebRTC transport connected successfully', { streamId })
           sendResponse({
             type: 'webRtcTransportConnected'
           })
         } catch (err) {
-          logger.error('Error connecting WebRTC transport', {
+          logger.error('WebRTCSignalingServer: Error connecting WebRTC transport', {
             streamId,
-            error: err.message
+            error: err.message,
+            stack: err.stack
           })
           sendResponse({
             type: 'error',
@@ -127,8 +138,19 @@ class WebRTCSignalingServer {
       case 'createConsumer': {
         // Create consumer for client
         try {
+          logger.info('Creating Consumer for client', {
+            streamId,
+            transportId: message.transportId,
+            hasRtpCapabilities: !!message.rtpCapabilities
+          })
           const { transportId, rtpCapabilities } = message
           const consumerInfo = await bridge.createConsumer(streamId, transportId, rtpCapabilities)
+          logger.info('Consumer created successfully', {
+            streamId,
+            consumerId: consumerInfo.id,
+            producerId: consumerInfo.producerId,
+            kind: consumerInfo.kind
+          })
           sendResponse({
             type: 'consumerCreated',
             data: consumerInfo
@@ -136,7 +158,8 @@ class WebRTCSignalingServer {
         } catch (err) {
           logger.error('Error creating consumer', {
             streamId,
-            error: err.message
+            error: err.message,
+            stack: err.stack
           })
           sendResponse({
             type: 'error',
