@@ -58,7 +58,7 @@ class PreviewBridge {
     })
 
     const portRangeSize = this.rtcMaxPort - this.rtcMinPort + 1
-    logger.info('PreviewBridge: Worker created with WebRTC port range', {
+    logger.debug('PreviewBridge: Worker created with WebRTC port range', {
       rtcMinPort: this.rtcMinPort,
       rtcMaxPort: this.rtcMaxPort,
       portRangeSize,
@@ -119,7 +119,7 @@ class PreviewBridge {
       throw new Error('Router not initialized. Call initialize() first.')
     }
 
-    logger.info('Starting preview (video only)', { streamId, srtUrl })
+    logger.debug('Starting preview (video only)', { streamId, srtUrl })
 
     // Step 1: Create PlainTransport for video only
     const videoPlainTransport = await this.router.createPlainTransport({
@@ -130,7 +130,7 @@ class PreviewBridge {
 
     this.videoPlainTransport = videoPlainTransport
 
-    logger.info('PlainTransport created', {
+    logger.debug('PlainTransport created', {
       streamId,
       video: {
         ip: videoPlainTransport.tuple.localIp,
@@ -142,7 +142,7 @@ class PreviewBridge {
 
     // Monitor PlainTransport RTCP tuple
     videoPlainTransport.on('rtcptuple', (rtcpTuple) => {
-      logger.info('PlainTransport RTCP tuple updated', {
+      logger.debug('PlainTransport RTCP tuple updated', {
         streamId,
         localIp: rtcpTuple.localIp,
         localPort: rtcpTuple.localPort,
@@ -183,7 +183,7 @@ class PreviewBridge {
 
     this.videoProducer = videoProducer
 
-    logger.info('Video Producer created', {
+    logger.debug('Video Producer created', {
       streamId,
       videoProducerId: videoProducer.id,
       kind: videoProducer.kind,
@@ -218,7 +218,7 @@ class PreviewBridge {
     })
 
     videoPlainTransport.on('tuple', (tuple) => {
-      logger.info('PlainTransport tuple updated', {
+      logger.debug('PlainTransport tuple updated', {
         streamId,
         localIp: tuple.localIp,
         localPort: tuple.localPort,
@@ -229,7 +229,7 @@ class PreviewBridge {
 
       if (!this.ffmpegReady && tuple.remoteIp) {
         this.ffmpegReady = true
-        logger.info('FFmpeg started sending RTP packets to PlainTransport', {
+        logger.debug('FFmpeg started sending RTP packets to PlainTransport', {
           streamId,
           localPort: tuple.localPort,
           remoteIp: tuple.remoteIp,
@@ -252,7 +252,7 @@ class PreviewBridge {
             if (transportReport) {
               const bytesReceived = transportReport.bytesReceived || 0
               const packetsReceived = transportReport.packetsReceived || 0
-              logger.info('PlainTransport packet reception (after FFmpeg started)', {
+              logger.debug('PlainTransport packet reception (after FFmpeg started)', {
                 streamId,
                 bytesReceived,
                 packetsReceived,
@@ -292,7 +292,7 @@ class PreviewBridge {
           )
         }))
 
-        logger.info('PlainTransport statistics (after 3s)', {
+        logger.debug('PlainTransport statistics (after 3s)', {
           streamId,
           tuple: {
             localIp: videoPlainTransport.tuple.localIp,
@@ -308,7 +308,7 @@ class PreviewBridge {
         if (transportReport) {
           const bytesReceived = transportReport.bytesReceived || 0
           const packetsReceived = transportReport.packetsReceived || 0
-          logger.info('PlainTransport packet reception (3s check)', {
+          logger.debug('PlainTransport packet reception (3s check)', {
             streamId,
             bytesReceived,
             packetsReceived,
@@ -337,7 +337,7 @@ class PreviewBridge {
         if (transportReport) {
           const bytesReceived = transportReport.bytesReceived || 0
           const packetsReceived = transportReport.packetsReceived || 0
-          logger.info('PlainTransport stats check (after 8s)', {
+          logger.debug('PlainTransport stats check (after 8s)', {
             streamId,
             bytesReceived,
             packetsReceived,
@@ -384,7 +384,7 @@ class PreviewBridge {
           )
         }))
 
-        logger.info('Video producer statistics (after 2s)', {
+        logger.debug('Video producer statistics (after 2s)', {
           streamId,
           producerId: videoProducer.id,
           kind: videoProducer.kind,
@@ -397,7 +397,7 @@ class PreviewBridge {
         const outboundRtpStats = statsArray.find(s => s.type === 'outbound-rtp')
 
         if (outboundRtpStats) {
-          logger.info('Producer outbound RTP stats', {
+          logger.debug('Producer outbound RTP stats', {
             streamId,
             bytesSent: outboundRtpStats.bytesSent || 0,
             packetsSent: outboundRtpStats.packetsSent || 0,
@@ -432,7 +432,7 @@ class PreviewBridge {
           .find(([id, report]) => report.type === 'outbound-rtp')?.[1]
 
         if (outboundRtpStats) {
-          logger.info('Producer stats check (after 5s)', {
+          logger.debug('Producer stats check (after 5s)', {
             streamId,
             producerId: videoProducer.id,
             bytesSent: outboundRtpStats.bytesSent || 0,
@@ -462,7 +462,7 @@ class PreviewBridge {
 
     this.isActive = true
 
-    logger.info('Preview started successfully', { streamId })
+    logger.debug('Preview started successfully', { streamId })
   }
 
   /**
@@ -480,10 +480,10 @@ class PreviewBridge {
     // Wait for FFmpeg to be ready (sending data) before creating WebRTC transport
     // This ensures the producer has data to forward to consumers
     if (!this.ffmpegReady && this.ffmpegReadyPromise) {
-      logger.info('Waiting for FFmpeg to start sending data before creating WebRTC transport', { streamId })
+      logger.debug('Waiting for FFmpeg to start sending data before creating WebRTC transport', { streamId })
       try {
         await this.ffmpegReadyPromise
-        logger.info('FFmpeg is ready, creating WebRTC transport', { streamId })
+        logger.debug('FFmpeg is ready, creating WebRTC transport', { streamId })
       } catch (err) {
         logger.error('FFmpeg failed to start, but creating WebRTC transport anyway', {
           streamId,
@@ -543,7 +543,7 @@ class PreviewBridge {
 
     this.webrtcTransports.set(streamId, transport)
 
-    logger.info('WebRTC transport created', {
+    logger.debug('WebRTC transport created', {
       streamId,
       transportId: transport.id
     })
@@ -570,7 +570,7 @@ class PreviewBridge {
 
     await transport.connect({ dtlsParameters })
 
-    logger.info('WebRTC transport connected', {
+    logger.debug('WebRTC transport connected', {
       streamId,
       transportId: transport.id
     })
@@ -595,7 +595,7 @@ class PreviewBridge {
       throw new Error('WebRTC transport not found')
     }
 
-    logger.info('Creating consumer', {
+    logger.debug('Creating consumer', {
       streamId,
       transportId: transport.id,
       producerId: producer.id,
@@ -629,7 +629,7 @@ class PreviewBridge {
 
     this.consumers.set(streamId, consumer)
 
-    logger.info('Consumer created successfully', {
+    logger.debug('Consumer created successfully', {
       streamId,
       consumerId: consumer.id,
       kind: consumer.kind,
@@ -648,7 +648,7 @@ class PreviewBridge {
     })
 
     // Log producer RTP parameters for comparison
-    logger.info('Producer RTP parameters (for comparison)', {
+    logger.debug('Producer RTP parameters (for comparison)', {
       streamId,
       producerId: producer.id,
       rtpParameters: {
@@ -661,7 +661,7 @@ class PreviewBridge {
     // Check producer stats before resuming consumer
     try {
       const producerStats = await producer.getStats()
-      logger.info('Producer statistics before consumer resume', {
+      logger.debug('Producer statistics before consumer resume', {
         streamId,
         producerId: producer.id,
         stats: Array.from(producerStats.entries()).map(([id, report]) => ({
@@ -680,7 +680,7 @@ class PreviewBridge {
     // Resume consumer immediately (for preview, we want it active)
     await consumer.resume()
 
-    logger.info('Consumer resumed', {
+    logger.debug('Consumer resumed', {
       streamId,
       consumerId: consumer.id,
       paused: consumer.paused
@@ -698,7 +698,7 @@ class PreviewBridge {
         )
       }))
 
-      logger.info('Consumer statistics after resume', {
+      logger.debug('Consumer statistics after resume', {
         streamId,
         consumerId: consumer.id,
         stats: statsArray
@@ -707,7 +707,7 @@ class PreviewBridge {
       // Check for inbound RTP stats to see if frames are being decoded
       const inboundRtpStats = statsArray.find(s => s.type === 'inbound-rtp')
       if (inboundRtpStats) {
-        logger.info('Consumer inbound RTP stats', {
+        logger.debug('Consumer inbound RTP stats', {
           streamId,
           consumerId: consumer.id,
           bytesReceived: inboundRtpStats.bytesReceived || 0,
@@ -763,7 +763,7 @@ class PreviewBridge {
    * @returns {Promise<void>}
    */
   async stopPreview (streamId) {
-    logger.info('Stopping preview', { streamId })
+    logger.debug('Stopping preview', { streamId })
 
     // Reset FFmpeg readiness state
     this.ffmpegReady = false
@@ -801,7 +801,7 @@ class PreviewBridge {
 
     this.isActive = false
 
-    logger.info('Preview stopped', { streamId })
+    logger.debug('Preview stopped', { streamId })
   }
 
   /**

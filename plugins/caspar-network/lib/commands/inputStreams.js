@@ -115,7 +115,7 @@ async function addInputStream (serverId, channel, layer, srtUrl, loop = false) {
     }
   })
 
-  logger.info('Input stream added with automatic output stream', {
+  logger.debug('Input stream added with automatic output stream', {
     streamId,
     outputStreamId,
     channel,
@@ -289,7 +289,7 @@ async function startInputStream (streamId) {
       }
     })
 
-    logger.info('Input stream started successfully', { streamId, channel: stream.channel, layer: stream.layer, srtUrl: stream.srtUrl })
+    logger.debug('Input stream started successfully', { streamId, channel: stream.channel, layer: stream.layer, srtUrl: stream.srtUrl })
 
     // Schedule a delayed check to verify the SRT connection actually succeeded
     // CasparCG accepts the command immediately, but the SRT connection happens asynchronously

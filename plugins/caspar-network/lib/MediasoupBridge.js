@@ -62,7 +62,7 @@ class MediasoupBridge {
     })
 
     const portRangeSize = this.rtcMaxPort - this.rtcMinPort + 1
-    logger.info('MediasoupBridge: Worker created with WebRTC port range', {
+    logger.debug('MediasoupBridge: Worker created with WebRTC port range', {
       rtcMinPort: this.rtcMinPort,
       rtcMaxPort: this.rtcMaxPort,
       portRangeSize,
@@ -128,7 +128,7 @@ class MediasoupBridge {
     // Store tuple event promise for waiting
     this.tuplePromise = new Promise((resolve) => {
       this.plainTransport.on('tuple', (tuple) => {
-        logger.info('MediasoupBridge: PlainTransport tuple updated (RTP packets detected)', {
+        logger.debug('MediasoupBridge: PlainTransport tuple updated (RTP packets detected)', {
           localIp: tuple.localIp,
           localPort: tuple.localPort,
           remoteIp: tuple.remoteIp,
@@ -144,7 +144,7 @@ class MediasoupBridge {
     })
 
     this.plainTransport.on('rtcptuple', (rtcpTuple) => {
-      logger.info('MediasoupBridge: PlainTransport RTCP tuple updated', {
+      logger.debug('MediasoupBridge: PlainTransport RTCP tuple updated', {
         localIp: rtcpTuple.localIp,
         localPort: rtcpTuple.localPort,
         remoteIp: rtcpTuple.remoteIp,
@@ -263,7 +263,7 @@ class MediasoupBridge {
       }
     }
 
-    logger.info('MediasoupBridge: Creating Producer with RTP parameters', {
+    logger.debug('MediasoupBridge: Creating Producer with RTP parameters', {
       hasCustomParams: !!rtpParameters,
       ssrc: finalRtpParameters.encodings?.[0]?.ssrc,
       payloadType: finalRtpParameters.codecs?.[0]?.payloadType,
@@ -326,7 +326,7 @@ class MediasoupBridge {
                 allStats: stats
               })
             } else {
-              logger.info('MediasoupBridge: Producer receiving packets', {
+              logger.debug('MediasoupBridge: Producer receiving packets', {
                 producerId: this.producer.id,
                 bytesReceived,
                 packetsReceived,
@@ -413,7 +413,7 @@ class MediasoupBridge {
           .then(ip => {
             this.publicIpCache = ip
             this.publicIpPromise = null
-            logger.info('MediasoupBridge: Public IP auto-detected', { publicIp: ip })
+            logger.debug('MediasoupBridge: Public IP auto-detected', { publicIp: ip })
             return ip
           })
           .catch(err => {
@@ -447,7 +447,7 @@ class MediasoupBridge {
       })
     }
 
-    logger.info('MediasoupBridge: Creating WebRTC transport with IP configuration', {
+    logger.debug('MediasoupBridge: Creating WebRTC transport with IP configuration', {
       streamId,
       serverIp,
       isPublicIp: !!publicIp,
@@ -482,7 +482,7 @@ class MediasoupBridge {
     const uniquePorts = [...new Set(candidatePorts)].sort((a, b) => a - b)
     const firewallCommand = `gcloud compute firewall-rules create allow-webrtc-${streamId.substring(0, 8)} --allow tcp:${uniquePorts.join(',tcp:')},udp:${uniquePorts.join(',udp:')} --source-ranges 0.0.0.0/0 --description "WebRTC ports for stream ${streamId}"`
 
-    logger.info('MediasoupBridge: WebRTC transport created with ICE candidates', {
+    logger.debug('MediasoupBridge: WebRTC transport created with ICE candidates', {
       streamId,
       transportId: transport.id,
       iceCandidatesCount: transport.iceCandidates?.length || 0,
@@ -511,7 +511,7 @@ class MediasoupBridge {
 
     // Set up transport event handlers for debugging
     transport.on('icestatechange', (iceState) => {
-      logger.info('MediasoupBridge: WebRTC transport ICE state changed', {
+      logger.debug('MediasoupBridge: WebRTC transport ICE state changed', {
         streamId,
         transportId: transport.id,
         iceState,
@@ -532,13 +532,13 @@ class MediasoupBridge {
 
       // Log specific state transitions with diagnostics
       if (iceState === 'checking') {
-        logger.info('MediasoupBridge: ICE connectivity checks started', {
+        logger.debug('MediasoupBridge: ICE connectivity checks started', {
           streamId,
           transportId: transport.id,
           note: 'Client should be attempting to connect to server ICE candidates. If this state persists, check firewall rules.'
         })
       } else if (iceState === 'connected' || iceState === 'completed') {
-        logger.info('MediasoupBridge: ICE connection established!', {
+        logger.debug('MediasoupBridge: ICE connection established!', {
           streamId,
           transportId: transport.id,
           iceState,
@@ -561,7 +561,7 @@ class MediasoupBridge {
     })
 
     transport.on('iceselectedtuplechange', (tuple) => {
-      logger.info('MediasoupBridge: WebRTC transport ICE selected tuple changed', {
+      logger.debug('MediasoupBridge: WebRTC transport ICE selected tuple changed', {
         streamId,
         transportId: transport.id,
         tuple: tuple
@@ -579,7 +579,7 @@ class MediasoupBridge {
     })
 
     transport.on('dtlsstatechange', (dtlsState) => {
-      logger.info('MediasoupBridge: WebRTC transport DTLS state changed', {
+      logger.debug('MediasoupBridge: WebRTC transport DTLS state changed', {
         streamId,
         transportId: transport.id,
         dtlsState,
@@ -588,7 +588,7 @@ class MediasoupBridge {
         hasIceSelectedTuple: !!transport.iceSelectedTuple
       })
       if (dtlsState === 'connected') {
-        logger.info('MediasoupBridge: WebRTC transport DTLS connected!', {
+        logger.debug('MediasoupBridge: WebRTC transport DTLS connected!', {
           streamId,
           transportId: transport.id
         })
@@ -601,7 +601,7 @@ class MediasoupBridge {
     })
 
     transport.on('connectionstatechange', (connectionState) => {
-      logger.info('MediasoupBridge: WebRTC transport connection state changed', {
+      logger.debug('MediasoupBridge: WebRTC transport connection state changed', {
         streamId,
         transportId: transport.id,
         connectionState,
@@ -652,7 +652,7 @@ class MediasoupBridge {
     })
 
     // Log initial state
-    logger.info('MediasoupBridge: WebRTC transport event handlers registered', {
+    logger.debug('MediasoupBridge: WebRTC transport event handlers registered', {
       streamId,
       transportId: transport.id,
       initialIceState: transport.iceState,
@@ -675,7 +675,7 @@ class MediasoupBridge {
       })
     })
 
-    logger.info('MediasoupBridge: WebRTC transport created', {
+    logger.debug('MediasoupBridge: WebRTC transport created', {
       streamId,
       transportId: transport.id,
       iceParameters: transport.iceParameters,
@@ -743,7 +743,7 @@ class MediasoupBridge {
               producerId: this.producer.id
             })
           } else {
-            logger.info('MediasoupBridge: Producer is receiving packets, creating Consumer', {
+            logger.debug('MediasoupBridge: Producer is receiving packets, creating Consumer', {
               streamId,
               producerId: this.producer.id,
               bytesReceived,
@@ -765,7 +765,7 @@ class MediasoupBridge {
       hasIceSelectedTuple: !!transport.iceSelectedTuple
     }
 
-    logger.info('MediasoupBridge: Transport state before creating Consumer', {
+    logger.debug('MediasoupBridge: Transport state before creating Consumer', {
       streamId,
       transportId: transport.id,
       ...transportStateBefore
@@ -806,7 +806,7 @@ class MediasoupBridge {
     }
 
     if (!isTransportReady()) {
-      logger.info('MediasoupBridge: Waiting for transport to be fully connected before creating Consumer', {
+      logger.debug('MediasoupBridge: Waiting for transport to be fully connected before creating Consumer', {
         streamId,
         transportId: transport.id,
         currentIceState: transport.iceState,
@@ -832,7 +832,7 @@ class MediasoupBridge {
           waitTime: Date.now() - startTime
         })
       } else {
-        logger.info('MediasoupBridge: Transport is now ready, creating Consumer', {
+        logger.debug('MediasoupBridge: Transport is now ready, creating Consumer', {
           streamId,
           transportId: transport.id,
           iceState: transport.iceState,
@@ -869,7 +869,7 @@ class MediasoupBridge {
         : null
     }
 
-    logger.info('MediasoupBridge: Consumer created', {
+    logger.debug('MediasoupBridge: Consumer created', {
       streamId,
       consumerId: consumer.id,
       kind: consumer.kind,
@@ -921,7 +921,7 @@ class MediasoupBridge {
             const packetsSent = outboundRtpStats.packetCount || outboundRtpStats.packetsSent || 0
             const bitrate = outboundRtpStats.bitrate || 0
             if (bytesSent > 0 || packetsSent > 0) {
-              logger.info('MediasoupBridge: Consumer sending data', {
+              logger.debug('MediasoupBridge: Consumer sending data', {
                 streamId,
                 consumerId: consumer.id,
                 bytesSent,
@@ -1003,7 +1003,7 @@ class MediasoupBridge {
     // Log Consumer stats after creation
     try {
       const consumerStats = await consumer.getStats()
-      logger.info('MediasoupBridge: Consumer stats after creation', {
+      logger.debug('MediasoupBridge: Consumer stats after creation', {
         streamId,
         consumerId: consumer.id,
         stats: consumerStats
@@ -1034,7 +1034,7 @@ class MediasoupBridge {
       throw new Error('WebRTC transport not found')
     }
 
-    logger.info('MediasoupBridge: Connecting WebRTC transport', {
+    logger.debug('MediasoupBridge: Connecting WebRTC transport', {
       streamId,
       transportId: transport.id,
       dtlsRole: dtlsParameters.role,
@@ -1047,7 +1047,7 @@ class MediasoupBridge {
       await transport.connect({ dtlsParameters })
 
       // Check transport state after connection attempt
-      logger.info('MediasoupBridge: WebRTC transport connect() called successfully', {
+      logger.debug('MediasoupBridge: WebRTC transport connect() called successfully', {
         streamId,
         transportId: transport.id,
         iceStateAfterConnect: transport.iceState,
@@ -1058,7 +1058,7 @@ class MediasoupBridge {
       setTimeout(async () => {
         const stats = await transport.getStats()
         const transportStats = stats.find(s => s.type === 'webrtc-transport')
-        logger.info('MediasoupBridge: WebRTC transport state 2 seconds after connect()', {
+        logger.debug('MediasoupBridge: WebRTC transport state 2 seconds after connect()', {
           streamId,
           transportId: transport.id,
           iceState: transport.iceState,

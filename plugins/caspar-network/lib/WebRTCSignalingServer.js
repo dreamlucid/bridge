@@ -25,7 +25,7 @@ class WebRTCSignalingServer {
   initialize () {
     // The WebSocket server is created in server.js
     // We just need to register handlers when previews start
-    logger.info('WebRTC signaling server ready (handlers will be registered per stream)')
+    logger.debug('WebRTC signaling server ready (handlers will be registered per stream)')
   }
 
   /**
@@ -106,7 +106,7 @@ class WebRTCSignalingServer {
       case 'connectWebRtcTransport': {
         // Connect WebRTC transport with client DTLS parameters
         try {
-          logger.info('WebRTCSignalingServer: Received connectWebRtcTransport message', {
+          logger.debug('WebRTCSignalingServer: Received connectWebRtcTransport message', {
             streamId,
             hasDtlsParameters: !!message.dtlsParameters,
             dtlsRole: message.dtlsParameters?.role,
@@ -117,7 +117,7 @@ class WebRTCSignalingServer {
             throw new Error('DTLS parameters missing')
           }
           await bridge.connectWebRTCTransport(streamId, dtlsParameters)
-          logger.info('WebRTCSignalingServer: WebRTC transport connected successfully', { streamId })
+          logger.debug('WebRTCSignalingServer: WebRTC transport connected successfully', { streamId })
           sendResponse({
             type: 'webRtcTransportConnected'
           })
@@ -138,14 +138,14 @@ class WebRTCSignalingServer {
       case 'createConsumer': {
         // Create consumer for client
         try {
-          logger.info('Creating Consumer for client', {
+          logger.debug('Creating Consumer for client', {
             streamId,
             transportId: message.transportId,
             hasRtpCapabilities: !!message.rtpCapabilities
           })
           const { transportId, rtpCapabilities } = message
           const consumerInfo = await bridge.createConsumer(streamId, transportId, rtpCapabilities)
-          logger.info('Consumer created successfully', {
+          logger.debug('Consumer created successfully', {
             streamId,
             consumerId: consumerInfo.id,
             producerId: consumerInfo.producerId,

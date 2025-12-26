@@ -14,7 +14,6 @@ export default function App () {
     try {
       const params = new URLSearchParams(window.location.search)
       const path = params.get('path')
-      console.log('Caspar Network Plugin: View path from URL:', path)
       setView(path)
     } catch (err) {
       console.error('Error parsing URL:', err)

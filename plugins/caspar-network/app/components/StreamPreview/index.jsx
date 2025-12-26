@@ -325,6 +325,15 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
 
                 consumerRef.current = consumer
 
+                // Track mute/unmute pattern for analysis
+                const muteUnmutePattern = {
+                  muteCount: 0,
+                  unmuteCount: 0,
+                  lastMuteTime: null,
+                  lastUnmuteTime: null,
+                  rapidToggleCount: 0
+                }
+
                 // Log track details
                 const track = consumer.track
                 console.log('Consumer track details', {
@@ -405,20 +414,110 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
                   })
 
                   // Monitor track state changes
-                  track.addEventListener('mute', () => {
-                    console.warn('Track muted', {
+                  track.addEventListener('mute', async () => {
+                    const now = Date.now()
+                    muteUnmutePattern.muteCount++
+                    muteUnmutePattern.lastMuteTime = now
+
+                    // Detect rapid toggling (mute/unmute within 100ms)
+                    if (muteUnmutePattern.lastUnmuteTime &&
+                        (now - muteUnmutePattern.lastUnmuteTime) < 100) {
+                      muteUnmutePattern.rapidToggleCount++
+                      if (muteUnmutePattern.rapidToggleCount > 5) {
+                        console.error('RAPID MUTE/UNMUTE TOGGLING DETECTED!', {
+                          toggleCount: muteUnmutePattern.rapidToggleCount,
+                          muteCount: muteUnmutePattern.muteCount,
+                          unmuteCount: muteUnmutePattern.unmuteCount,
+                          timeSinceLastUnmute: now - muteUnmutePattern.lastUnmuteTime
+                        })
+                      }
+                    }
+                    // Get immediate stats for analysis
+                    let immediateStats = null
+                    try {
+                      const stats = await consumer.getStats()
+                      const inboundRtp = Array.from(stats.values())
+                        .find(report => report.type === 'inbound-rtp')
+                      const candidatePair = Array.from(stats.values())
+                        .find(report => report.type === 'candidate-pair')
+
+                      const frameDropRate = inboundRtp && (inboundRtp.framesDecoded + inboundRtp.framesDropped) > 0
+                        ? ((inboundRtp.framesDropped / (inboundRtp.framesDecoded + inboundRtp.framesDropped)) * 100).toFixed(2) + '%'
+                        : '0%'
+
+                      immediateStats = {
+                        inboundRtp: inboundRtp
+                          ? {
+                              packetsReceived: inboundRtp.packetsReceived,
+                              packetsLost: inboundRtp.packetsLost,
+                              framesDecoded: inboundRtp.framesDecoded,
+                              framesDropped: inboundRtp.framesDropped,
+                              frameDropRate,
+                              jitter: inboundRtp.jitter,
+                              bytesReceived: inboundRtp.bytesReceived,
+                              lastPacketReceivedTimestamp: inboundRtp.lastPacketReceivedTimestamp
+                            }
+                          : null,
+                        candidatePair: candidatePair
+                          ? {
+                              availableOutgoingBitrate: candidatePair.availableOutgoingBitrate,
+                              bytesReceived: candidatePair.bytesReceived,
+                              bytesSent: candidatePair.bytesSent,
+                              state: candidatePair.state
+                            }
+                          : null
+                      }
+                    } catch (err) {
+                      console.error('Failed to get immediate stats when muted:', err)
+                    }
+
+                    console.warn('Track muted - Detailed Analysis', {
                       trackId: track.id,
                       enabled: track.enabled,
                       muted: track.muted,
-                      readyState: track.readyState
+                      readyState: track.readyState,
+                      consumerPaused: consumer.paused,
+                      transportState: recvTransportRef.current?.connectionState,
+                      transportIceState: recvTransportRef.current?.iceState,
+                      transportDtlsState: recvTransportRef.current?.dtlsState,
+                      videoElement: videoRef.current
+                        ? {
+                            paused: videoRef.current.paused,
+                            muted: videoRef.current.muted,
+                            readyState: videoRef.current.readyState,
+                            currentTime: videoRef.current.currentTime,
+                            videoWidth: videoRef.current.videoWidth,
+                            videoHeight: videoRef.current.videoHeight
+                          }
+                        : null,
+                      stats: immediateStats
                     })
-                    // Check if track was muted due to no data
+
+                    // Check if track was muted due to no data (delayed check)
                     setTimeout(async () => {
                       try {
                         const stats = await consumer.getStats()
-                        console.warn('Consumer stats when track muted', {
+                        const inboundRtp = Array.from(stats.values())
+                          .find(report => report.type === 'inbound-rtp')
+
+                        console.warn('Consumer stats when track muted (1s later)', {
                           consumerId: consumer.id,
-                          stats: Array.from(stats.entries()).map(([id, report]) => ({
+                          consumerPaused: consumer.paused,
+                          inboundRtp: inboundRtp
+                            ? {
+                                packetsReceived: inboundRtp.packetsReceived,
+                                packetsLost: inboundRtp.packetsLost,
+                                framesDecoded: inboundRtp.framesDecoded,
+                                framesDropped: inboundRtp.framesDropped,
+                                jitter: inboundRtp.jitter,
+                                bytesReceived: inboundRtp.bytesReceived,
+                                lastPacketReceivedTimestamp: inboundRtp.lastPacketReceivedTimestamp,
+                                packetsPerSecond: inboundRtp.packetsReceived
+                                  ? (inboundRtp.packetsReceived / ((stats.values().next().value?.timestamp || Date.now()) / 1000))
+                                  : 0
+                              }
+                            : null,
+                          allStats: Array.from(stats.entries()).map(([id, report]) => ({
                             id,
                             type: report.type,
                             ...Object.fromEntries(
@@ -431,12 +530,60 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
                       }
                     }, 1000)
                   })
-                  track.addEventListener('unmute', () => {
-                    console.log('Track unmuted', {
+                  track.addEventListener('unmute', async () => {
+                    const now = Date.now()
+                    muteUnmutePattern.unmuteCount++
+                    muteUnmutePattern.lastUnmuteTime = now
+
+                    // Log pattern summary periodically
+                    if ((muteUnmutePattern.muteCount + muteUnmutePattern.unmuteCount) % 10 === 0) {
+                      console.warn('Mute/Unmute Pattern Summary', {
+                        totalMutes: muteUnmutePattern.muteCount,
+                        totalUnmutes: muteUnmutePattern.unmuteCount,
+                        rapidToggleCount: muteUnmutePattern.rapidToggleCount,
+                        lastMuteTime: muteUnmutePattern.lastMuteTime,
+                        lastUnmuteTime: muteUnmutePattern.lastUnmuteTime
+                      })
+                    }
+                    // Get immediate stats for analysis
+                    let immediateStats = null
+                    try {
+                      const stats = await consumer.getStats()
+                      const inboundRtp = Array.from(stats.values())
+                        .find(report => report.type === 'inbound-rtp')
+
+                      immediateStats = {
+                        inboundRtp: inboundRtp
+                          ? {
+                              packetsReceived: inboundRtp.packetsReceived,
+                              packetsLost: inboundRtp.packetsLost,
+                              framesDecoded: inboundRtp.framesDecoded,
+                              framesDropped: inboundRtp.framesDropped,
+                              jitter: inboundRtp.jitter,
+                              bytesReceived: inboundRtp.bytesReceived
+                            }
+                          : null
+                      }
+                    } catch (err) {
+                      console.error('Failed to get immediate stats when unmuted:', err)
+                    }
+
+                    console.log('Track unmuted - Detailed Analysis', {
                       trackId: track.id,
                       enabled: track.enabled,
                       muted: track.muted,
-                      readyState: track.readyState
+                      readyState: track.readyState,
+                      consumerPaused: consumer.paused,
+                      transportState: recvTransportRef.current?.connectionState,
+                      videoElement: videoRef.current
+                        ? {
+                            paused: videoRef.current.paused,
+                            muted: videoRef.current.muted,
+                            readyState: videoRef.current.readyState,
+                            currentTime: videoRef.current.currentTime
+                          }
+                        : null,
+                      stats: immediateStats
                     })
                   })
                   track.addEventListener('ended', () => {
@@ -468,13 +615,46 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
                       // Check if we're receiving any data
                       const inboundRtpStats = statsArray.find(s => s.type === 'inbound-rtp')
                       if (inboundRtpStats) {
+                        const framesDecoded = inboundRtpStats.framesDecoded || 0
+                        const framesDropped = inboundRtpStats.framesDropped || 0
+                        const totalFrames = framesDecoded + framesDropped
+                        const frameDropRate = totalFrames > 0
+                          ? (framesDropped / totalFrames) * 100
+                          : 0
+
                         console.log('Inbound RTP stats', {
                           bytesReceived: inboundRtpStats.bytesReceived || 0,
                           packetsReceived: inboundRtpStats.packetsReceived || 0,
-                          framesDecoded: inboundRtpStats.framesDecoded || 0,
-                          framesDropped: inboundRtpStats.framesDropped || 0,
-                          jitter: inboundRtpStats.jitter || 0
+                          framesDecoded,
+                          framesDropped,
+                          frameDropRate: frameDropRate.toFixed(2) + '%',
+                          jitter: inboundRtpStats.jitter || 0,
+                          packetsLost: inboundRtpStats.packetsLost || 0,
+                          packetLossRate: inboundRtpStats.packetsReceived
+                            ? ((inboundRtpStats.packetsLost || 0) / inboundRtpStats.packetsReceived * 100).toFixed(2) + '%'
+                            : '0%'
                         })
+
+                        // Alert if frame drop rate exceeds threshold (5%)
+                        if (frameDropRate > 5 && totalFrames > 100) {
+                          console.error('HIGH FRAME DROP RATE DETECTED!', {
+                            frameDropRate: frameDropRate.toFixed(2) + '%',
+                            framesDecoded,
+                            framesDropped,
+                            totalFrames,
+                            threshold: '5%',
+                            impact: 'Browser may auto-mute track due to high frame drop rate',
+                            recommendation: 'Check decoder performance, buffer size, and producer frame rate'
+                          })
+                        } else if (frameDropRate > 3 && totalFrames > 100) {
+                          console.warn('Elevated frame drop rate detected', {
+                            frameDropRate: frameDropRate.toFixed(2) + '%',
+                            framesDecoded,
+                            framesDropped,
+                            threshold: '3%',
+                            warning: 'Approaching threshold that may cause track muting'
+                          })
+                        }
 
                         // If no packets received, the producer might not be sending
                         if (!inboundRtpStats.packetsReceived || inboundRtpStats.packetsReceived === 0) {

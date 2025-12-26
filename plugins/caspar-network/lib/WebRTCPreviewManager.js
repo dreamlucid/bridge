@@ -52,7 +52,7 @@ class WebRTCPreviewManager {
     // Store preview
     this.activePreviews.set(streamId, bridge)
 
-    logger.info('WebRTC preview started', { streamId })
+    logger.debug('WebRTC preview started', { streamId })
 
     return {
       bridge
@@ -78,7 +78,7 @@ class WebRTCPreviewManager {
     // Remove from active previews
     this.activePreviews.delete(streamId)
 
-    logger.info('WebRTC preview stopped', { streamId })
+    logger.debug('WebRTC preview stopped', { streamId })
   }
 
   /**

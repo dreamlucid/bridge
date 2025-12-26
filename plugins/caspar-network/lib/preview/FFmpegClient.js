@@ -177,14 +177,14 @@ class FFmpegClient {
         } else if (output.includes('error') || output.includes('Error') || output.includes('Failed')) {
           logger.warn('FFmpeg stderr', { streamId, output: output.substring(0, 500) })
         } else if (output.includes('Stream #0') || output.includes('Input #0') || output.includes('Output #0')) {
-          // Log stream info at info level
-          logger.info('FFmpeg stream info', { streamId, output: output.substring(0, 200) })
+          // Log stream info at debug level
+          logger.debug('FFmpeg stream info', { streamId, output: output.substring(0, 200) })
         } else if (output.includes('frame=') || output.includes('fps=') || output.includes('bitrate=')) {
-          // Log encoding progress
-          logger.info('FFmpeg encoding progress', { streamId, output: output.substring(0, 200) })
+          // Log encoding progress at debug level
+          logger.debug('FFmpeg encoding progress', { streamId, output: output.substring(0, 200) })
         } else if (output.includes('NVIDIA') || output.includes('nvenc') || output.includes('cuda')) {
-          // Log hardware acceleration info
-          logger.info('FFmpeg hardware acceleration info', { streamId, output: output.substring(0, 200) })
+          // Log hardware acceleration info at debug level
+          logger.debug('FFmpeg hardware acceleration info', { streamId, output: output.substring(0, 200) })
         } else {
           logger.debug('FFmpeg stderr', { streamId, output: output.substring(0, 200) })
         }
@@ -236,7 +236,7 @@ class FFmpegClient {
         if (subprocess.killed || subprocess.exitCode !== null) {
           reject(new Error('FFmpeg process failed to start'))
         } else {
-          logger.info('FFmpeg process started successfully', { streamId })
+          logger.debug('FFmpeg process started successfully', { streamId })
           resolve()
         }
       }, 1000)
