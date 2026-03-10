@@ -19,12 +19,14 @@ const preview = require('./commands/preview')
 // Register input stream commands
 bridge.commands.registerCommand('caspar-network.addInputStream', inputStreams.addInputStream)
 bridge.commands.registerCommand('caspar-network.removeInputStream', inputStreams.removeInputStream)
+bridge.commands.registerCommand('caspar-network.reloadInputStream', inputStreams.reloadInputStream)
 bridge.commands.registerCommand('caspar-network.startInputStream', inputStreams.startInputStream)
 bridge.commands.registerCommand('caspar-network.stopInputStream', inputStreams.stopInputStream)
 
 // Register output stream commands
 bridge.commands.registerCommand('caspar-network.addOutputStream', outputStreams.addOutputStream)
 bridge.commands.registerCommand('caspar-network.removeOutputStream', outputStreams.removeOutputStream)
+bridge.commands.registerCommand('caspar-network.reloadOutputStream', outputStreams.reloadOutputStream)
 bridge.commands.registerCommand('caspar-network.startOutputStream', outputStreams.startOutputStream)
 bridge.commands.registerCommand('caspar-network.stopOutputStream', outputStreams.stopOutputStream)
 
@@ -87,11 +89,13 @@ exports.streamManager = streamManager
 // Export all commands for backward compatibility (if needed)
 exports.addInputStream = inputStreams.addInputStream
 exports.removeInputStream = inputStreams.removeInputStream
+exports.reloadInputStream = inputStreams.reloadInputStream
 exports.startInputStream = inputStreams.startInputStream
 exports.stopInputStream = inputStreams.stopInputStream
 
 exports.addOutputStream = outputStreams.addOutputStream
 exports.removeOutputStream = outputStreams.removeOutputStream
+exports.reloadOutputStream = outputStreams.reloadOutputStream
 exports.startOutputStream = outputStreams.startOutputStream
 exports.stopOutputStream = outputStreams.stopOutputStream
 

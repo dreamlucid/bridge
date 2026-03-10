@@ -333,6 +333,29 @@ async function startInputStream (streamId) {
 }
 
 /**
+ * Reload an SRT input stream by removing and re-adding it (same config), then starting it.
+ * @param { String } streamId - Stream ID
+ * @returns { Promise<String> } New stream ID after reload
+ */
+async function reloadInputStream (streamId) {
+  logger.debug('Reloading input stream', streamId)
+
+  const stream = streamManager.getInputStream(streamId)
+  if (!stream) {
+    throw new Error('Input stream not found')
+  }
+
+  const { serverId, channel, layer, srtUrl, loop } = stream
+
+  await removeInputStream(streamId)
+  const newStreamId = await addInputStream(serverId, channel, layer, srtUrl, loop)
+  await startInputStream(newStreamId)
+
+  logger.debug('Input stream reloaded', { oldStreamId: streamId, newStreamId })
+  return newStreamId
+}
+
+/**
  * Stop an SRT input stream
  * @param { String } streamId - Stream ID
  * @returns { Promise<void> }
@@ -386,6 +409,7 @@ async function stopInputStream (streamId) {
 module.exports = {
   addInputStream,
   removeInputStream,
+  reloadInputStream,
   startInputStream,
   stopInputStream
 }

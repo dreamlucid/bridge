@@ -97,6 +97,29 @@ async function removeOutputStream (streamId) {
 }
 
 /**
+ * Reload an SRT output stream by removing and re-adding it (same config), then starting it.
+ * @param { String } streamId - Stream ID
+ * @returns { Promise<String> } New stream ID after reload
+ */
+async function reloadOutputStream (streamId) {
+  logger.debug('Reloading output stream', streamId)
+
+  const stream = streamManager.getOutputStream(streamId)
+  if (!stream) {
+    throw new Error('Output stream not found')
+  }
+
+  const { serverId, channel, index, srtUrl, encodingOptions } = stream
+
+  await removeOutputStream(streamId)
+  const newStreamId = await addOutputStream(serverId, channel, index, srtUrl, encodingOptions)
+  await startOutputStream(newStreamId)
+
+  logger.debug('Output stream reloaded', { oldStreamId: streamId, newStreamId })
+  return newStreamId
+}
+
+/**
  * Start an SRT output stream
  * @param { String } streamId - Stream ID
  * @returns { Promise<void> }
@@ -305,6 +328,7 @@ async function stopOutputStream (streamId) {
 module.exports = {
   addOutputStream,
   removeOutputStream,
+  reloadOutputStream,
   startOutputStream,
   stopOutputStream
 }

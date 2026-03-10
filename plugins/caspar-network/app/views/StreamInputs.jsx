@@ -17,6 +17,7 @@ export const StreamInputs = () => {
   })
   const [errors, setErrors] = React.useState({})
   const [loading, setLoading] = React.useState(false)
+  const [reloadingId, setReloadingId] = React.useState(null)
 
   const pluginName = window.PLUGIN?.name || 'bridge-plugin-caspar-network'
 
@@ -160,6 +161,17 @@ export const StreamInputs = () => {
       }
     } catch (err) {
       console.error('Error refreshing streams:', err)
+    }
+  }
+
+  async function handleReload (streamId) {
+    setReloadingId(streamId)
+    try {
+      await bridge.commands.executeCommand('caspar-network.reloadInputStream', streamId)
+    } catch (err) {
+      console.error('Error reloading stream:', err)
+    } finally {
+      setReloadingId(null)
     }
   }
 
@@ -316,6 +328,14 @@ export const StreamInputs = () => {
                             Start
                           </button>
                         )}
+                    <button
+                      className='Button Button--ghost'
+                      onClick={() => handleReload(stream.id)}
+                      disabled={reloadingId === stream.id}
+                      title='Remove and re-add this stream with the same config, then start it'
+                    >
+                      {reloadingId === stream.id ? 'Reloading...' : 'Reload'}
+                    </button>
                     <button className='Button Button--ghost' onClick={() => handleRefresh(stream.id)}>
                       Refresh
                     </button>

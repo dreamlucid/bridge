@@ -136,7 +136,7 @@ html, body, .View--flex {
 
 .StreamList-item-details {
   font-size: 12px;
-  color: var(--base-color--grey1);
+  color: var(--base-color--text);
   margin-bottom: 8px;
   line-height: 1.4;
 }
