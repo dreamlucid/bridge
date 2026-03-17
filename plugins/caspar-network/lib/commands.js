@@ -15,6 +15,7 @@ const inputStreams = require('./commands/inputStreams')
 const outputStreams = require('./commands/outputStreams')
 const streamStatus = require('./streamStatus')
 const preview = require('./commands/preview')
+const channelPreview = require('./commands/channelPreview')
 
 // Register input stream commands
 bridge.commands.registerCommand('caspar-network.addInputStream', inputStreams.addInputStream)
@@ -35,10 +36,17 @@ bridge.commands.registerCommand('caspar-network.listStreams', streamStatus.listS
 bridge.commands.registerCommand('caspar-network.getStreamStatus', streamStatus.getStreamStatus)
 bridge.commands.registerCommand('caspar-network.refreshStreamStatus', streamStatus.refreshStreamStatus)
 
-// Register preview commands
+// Register preview commands (legacy: output-stream-based, kept for compatibility)
 bridge.commands.registerCommand('caspar-network.startPreview', preview.startPreview)
 bridge.commands.registerCommand('caspar-network.stopPreview', preview.stopPreview)
 bridge.commands.registerCommand('caspar-network.getPreviewUrl', preview.getPreviewUrl)
+
+// Register channel-based preview commands (dedicated SRT port, one per channel, not in output widget)
+bridge.commands.registerCommand('caspar-network.startChannelPreview', channelPreview.startChannelPreview)
+bridge.commands.registerCommand('caspar-network.stopChannelPreview', channelPreview.stopChannelPreview)
+bridge.commands.registerCommand('caspar-network.getChannelPreviewUrl', channelPreview.getChannelPreviewUrl)
+bridge.commands.registerCommand('caspar-network.listChannelPreviews', channelPreview.listChannelPreviews)
+bridge.commands.registerCommand('caspar-network.listPreviewableChannels', channelPreview.listPreviewableChannels)
 
 // Register command to handle WebRTC signaling messages
 // This is called by server.js (main thread) to route messages to the plugin (worker thread)
@@ -106,3 +114,8 @@ exports.refreshStreamStatus = streamStatus.refreshStreamStatus
 exports.startPreview = preview.startPreview
 exports.stopPreview = preview.stopPreview
 exports.getPreviewUrl = preview.getPreviewUrl
+exports.startChannelPreview = channelPreview.startChannelPreview
+exports.stopChannelPreview = channelPreview.stopChannelPreview
+exports.getChannelPreviewUrl = channelPreview.getChannelPreviewUrl
+exports.listChannelPreviews = channelPreview.listChannelPreviews
+exports.listPreviewableChannels = channelPreview.listPreviewableChannels

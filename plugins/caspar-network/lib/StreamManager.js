@@ -34,6 +34,19 @@ const uuid = require('uuid')
  */
 
 /**
+ * @typedef {{
+ *   channelKey: String,
+ *   serverId: String,
+ *   channel: Number,
+ *   streamIndex: Number,
+ *   srtUrl: String,
+ *   encodingOptions: Object,
+ *   status: 'active' | 'stopped' | 'error',
+ *   lastError: String | null
+ * }} ChannelPreview
+ */
+
+/**
  * Manages the lifecycle and state of SRT streams
  */
 class StreamManager {
@@ -47,6 +60,22 @@ class StreamManager {
      * @type { Map.<String, OutputStream> }
      */
     this.outputStreams = new Map()
+
+    /**
+     * Channel previews (one per channel), keyed by channelKey = `${serverId}-${channel}`
+     * @type { Map.<String, ChannelPreview> }
+     */
+    this.channelPreviews = new Map()
+  }
+
+  /**
+   * Get channel key for a server/channel pair
+   * @param { String } serverId - CasparCG server ID
+   * @param { Number } channel - Channel number
+   * @returns { String }
+   */
+  static channelKey (serverId, channel) {
+    return `${serverId}-${channel}`
   }
 
   /**
@@ -230,6 +259,83 @@ class StreamManager {
       inputs: this.getAllInputStreams(),
       outputs: this.getAllOutputStreams()
     }
+  }
+
+  // --- Channel preview (dedicated preview per channel, not in output streams) ---
+
+  /**
+   * Add or update a channel preview entry
+   * @param { String } serverId - CasparCG server ID
+   * @param { Number } channel - Channel number
+   * @param { Number } streamIndex - Stream index used for ADD/REMOVE STREAM
+   * @param { String } srtUrl - SRT listener URL for the preview
+   * @param { Object } encodingOptions - Encoding options used
+   * @returns { String } channelKey
+   */
+  setChannelPreview (serverId, channel, streamIndex, srtUrl, encodingOptions = {}) {
+    const channelKey = StreamManager.channelKey(serverId, channel)
+    const entry = {
+      channelKey,
+      serverId,
+      channel,
+      streamIndex,
+      srtUrl,
+      encodingOptions,
+      status: 'active',
+      lastError: null
+    }
+    this.channelPreviews.set(channelKey, entry)
+    return channelKey
+  }
+
+  /**
+   * Get channel preview by channel key
+   * @param { String } channelKey - `${serverId}-${channel}`
+   * @returns { ChannelPreview | undefined }
+   */
+  getChannelPreview (channelKey) {
+    return this.channelPreviews.get(channelKey)
+  }
+
+  /**
+   * Get channel preview by server and channel
+   * @param { String } serverId - CasparCG server ID
+   * @param { Number } channel - Channel number
+   * @returns { ChannelPreview | undefined }
+   */
+  getChannelPreviewByServerChannel (serverId, channel) {
+    return this.channelPreviews.get(StreamManager.channelKey(serverId, channel))
+  }
+
+  /**
+   * Remove a channel preview
+   * @param { String } channelKey - Channel key
+   * @returns { boolean }
+   */
+  removeChannelPreview (channelKey) {
+    return this.channelPreviews.delete(channelKey)
+  }
+
+  /**
+   * Update channel preview status
+   * @param { String } channelKey - Channel key
+   * @param { 'active' | 'stopped' | 'error' } status - New status
+   * @param { String | null } error - Error message if status is 'error'
+   */
+  updateChannelPreviewStatus (channelKey, status, error = null) {
+    const entry = this.channelPreviews.get(channelKey)
+    if (entry) {
+      entry.status = status
+      entry.lastError = error
+    }
+  }
+
+  /**
+   * Get all channel previews
+   * @returns { ChannelPreview[] }
+   */
+  getAllChannelPreviews () {
+    return Array.from(this.channelPreviews.values())
   }
 }
 

@@ -46,10 +46,18 @@ class WebRTCPreviewManager {
     // Initialize mediasoup
     await bridge.initialize()
 
-    // Start preview (this creates PlainTransports, Producers, then starts FFmpeg)
-    await bridge.startPreview(streamId, srtUrl)
+    try {
+      // Start preview (this creates PlainTransports, Producers, then starts FFmpeg)
+      await bridge.startPreview(streamId, srtUrl)
+    } catch (err) {
+      logger.warn('Preview start failed, cleaning up bridge', { streamId, error: err.message })
+      await bridge.stop().catch(cleanupErr => {
+        logger.warn('Error during bridge cleanup after start failure', { streamId, error: cleanupErr?.message })
+      })
+      throw err
+    }
 
-    // Store preview
+    // Store preview only after successful start
     this.activePreviews.set(streamId, bridge)
 
     logger.debug('WebRTC preview started', { streamId })

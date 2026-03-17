@@ -9,15 +9,17 @@ import bridge from 'bridge'
 import './style.css'
 
 /**
- * StreamPreview component for displaying WebRTC video streams using mediasoup (low-latency real-time preview)
- * Refactored to follow mediasoup-demo patterns
+ * StreamPreview component for displaying WebRTC video streams using mediasoup (low-latency real-time preview).
+ * Supports channel-based preview (serverId + channel, dedicated SRT port) or legacy output-stream preview (streamId).
  * @param {Object} props
- * @param {string} props.streamId - Stream ID
+ * @param {string} [props.streamId] - Stream ID (legacy: output stream id)
+ * @param {string} [props.serverId] - CasparCG server ID (channel preview)
+ * @param {number} [props.channel] - Channel number (channel preview)
  * @param {boolean} [props.autoPlay=true] - Auto-play the video
  * @param {boolean} [props.controls=true] - Show video controls
  * @param {boolean} [props.muted=true] - Mute video by default
  */
-export const StreamPreview = ({ streamId, autoPlay = true, controls = true, muted = true }) => {
+export const StreamPreview = ({ streamId: streamIdProp, serverId, channel, autoPlay = true, controls = true, muted = true }) => {
   const videoRef = useRef(null)
   const deviceRef = useRef(null)
   const recvTransportRef = useRef(null)
@@ -26,6 +28,9 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState('disconnected')
+
+  const isChannelPreview = serverId != null && channel != null
+  const streamId = isChannelPreview ? `${serverId}-${channel}` : streamIdProp
 
   useEffect(() => {
     if (!streamId) {
@@ -40,8 +45,9 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
         setError(null)
         setStatus('connecting')
 
-        // Start WebRTC proxy and get signaling URL (now returns relative path)
-        const signalingPath = await bridge.commands.executeCommand('caspar-network.startPreview', streamId)
+        const signalingPath = isChannelPreview
+          ? await bridge.commands.executeCommand('caspar-network.startChannelPreview', serverId, channel)
+          : await bridge.commands.executeCommand('caspar-network.startPreview', streamId)
         if (!isMounted) return
 
         // Construct full WebSocket URL from relative path using current location
@@ -812,14 +818,19 @@ export const StreamPreview = ({ streamId, autoPlay = true, controls = true, mute
     return () => {
       isMounted = false
       cleanup()
-      // Stop preview when component unmounts
       if (streamId) {
-        bridge.commands.executeCommand('caspar-network.stopPreview', streamId).catch(err => {
-          console.error('Error stopping preview:', err)
-        })
+        if (isChannelPreview) {
+          bridge.commands.executeCommand('caspar-network.stopChannelPreview', serverId, channel).catch(err => {
+            console.error('Error stopping channel preview:', err)
+          })
+        } else {
+          bridge.commands.executeCommand('caspar-network.stopPreview', streamId).catch(err => {
+            console.error('Error stopping preview:', err)
+          })
+        }
       }
     }
-  }, [streamId, autoPlay])
+  }, [streamId, isChannelPreview, serverId, channel, autoPlay])
 
   if (error) {
     return (

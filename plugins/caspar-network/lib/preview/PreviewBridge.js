@@ -38,6 +38,8 @@ class PreviewBridge {
     this.ffmpegReady = false // Flag to track if FFmpeg is sending data
     this.ffmpegReadyPromise = null // Promise that resolves when FFmpeg is ready
     this.ffmpegReadyResolve = null
+    this.ffmpegReadyReject = null
+    this.ffmpegReadyTimeoutId = null
   }
 
   /**
@@ -205,13 +207,15 @@ class PreviewBridge {
 
     // Monitor PlainTransport for when FFmpeg starts sending packets
     // The tuple event fires when the first packet is received
-    // Create a promise that resolves when FFmpeg is ready
+    // Create a promise that resolves when FFmpeg is ready (or rejects on timeout/failure)
     this.ffmpegReady = false
     this.ffmpegReadyPromise = new Promise((resolve, reject) => {
       this.ffmpegReadyResolve = resolve
-      // Timeout after 10 seconds - if FFmpeg doesn't start, reject
-      setTimeout(() => {
+      this.ffmpegReadyReject = reject
+      // Timeout after 10 seconds - if FFmpeg doesn't start, reject (cleared when ready or on cleanup)
+      this.ffmpegReadyTimeoutId = setTimeout(() => {
         if (!this.ffmpegReady) {
+          this.ffmpegReadyTimeoutId = null
           reject(new Error('FFmpeg failed to start sending data within 10 seconds'))
         }
       }, 10000)
@@ -229,6 +233,10 @@ class PreviewBridge {
 
       if (!this.ffmpegReady && tuple.remoteIp) {
         this.ffmpegReady = true
+        if (this.ffmpegReadyTimeoutId) {
+          clearTimeout(this.ffmpegReadyTimeoutId)
+          this.ffmpegReadyTimeoutId = null
+        }
         logger.debug('FFmpeg started sending RTP packets to PlainTransport', {
           streamId,
           localPort: tuple.localPort,
@@ -240,6 +248,7 @@ class PreviewBridge {
         if (this.ffmpegReadyResolve) {
           this.ffmpegReadyResolve()
           this.ffmpegReadyResolve = null
+          this.ffmpegReadyReject = null
         }
 
         // Check stats shortly after FFmpeg starts sending
@@ -445,21 +454,53 @@ class PreviewBridge {
       }
     }, 5000)
 
-    // Step 4: Start FFmpeg to send RTP to PlainTransport (video only)
-    // Use hardware acceleration (NVENC/NVDEC) by default
-    await this.ffmpegClient.sendSRTStream({
-      streamId,
-      srtUrl,
-      videoTransport: {
-        ip: videoPlainTransport.tuple.localIp,
-        port: videoPlainTransport.tuple.localPort,
-        rtcpPort: videoPlainTransport.rtcpTuple?.localPort
-      },
-      videoSsrc,
-      videoPt,
-      useHardware: true // Enable hardware acceleration
-    })
+    // Step 4: Start FFmpeg and wait for it to send data (recovery: cleanup on any failure, no crash)
+    const cleanupOnFailure = async (err) => {
+      logger.warn('Preview start failed, cleaning up', { streamId, error: err?.message })
+      if (this.ffmpegReadyTimeoutId) {
+        clearTimeout(this.ffmpegReadyTimeoutId)
+        this.ffmpegReadyTimeoutId = null
+      }
+      this.ffmpegReady = false
+      this.ffmpegReadyPromise = null
+      this.ffmpegReadyResolve = null
+      this.ffmpegReadyReject = null
+      await this.ffmpegClient.stopStream(streamId).catch(() => {})
+      if (this.videoProducer) {
+        this.videoProducer.close()
+        this.videoProducer = null
+      }
+      if (this.videoPlainTransport) {
+        this.videoPlainTransport.close()
+        this.videoPlainTransport = null
+      }
+    }
 
+    try {
+      await this.ffmpegClient.sendSRTStream({
+        streamId,
+        srtUrl,
+        videoTransport: {
+          ip: videoPlainTransport.tuple.localIp,
+          port: videoPlainTransport.tuple.localPort,
+          rtcpPort: videoPlainTransport.rtcpTuple?.localPort
+        },
+        videoSsrc,
+        videoPt,
+        useHardware: true // Enable hardware acceleration
+      })
+
+      // Wait for FFmpeg to actually send data (or timeout); avoids unhandled rejection
+      await this.ffmpegReadyPromise
+    } catch (err) {
+      await cleanupOnFailure(err)
+      throw err
+    }
+
+    this.ffmpegReadyTimeoutId = null
+    this.ffmpegReadyPromise = null
+    this.ffmpegReadyResolve = null
+    this.ffmpegReadyReject = null
     this.isActive = true
 
     logger.debug('Preview started successfully', { streamId })
@@ -765,10 +806,15 @@ class PreviewBridge {
   async stopPreview (streamId) {
     logger.debug('Stopping preview', { streamId })
 
-    // Reset FFmpeg readiness state
+    // Reset FFmpeg readiness state (clear timeout to avoid rejection after stop)
     this.ffmpegReady = false
+    if (this.ffmpegReadyTimeoutId) {
+      clearTimeout(this.ffmpegReadyTimeoutId)
+      this.ffmpegReadyTimeoutId = null
+    }
     this.ffmpegReadyPromise = null
     this.ffmpegReadyResolve = null
+    this.ffmpegReadyReject = null
 
     // Stop FFmpeg
     await this.ffmpegClient.stopStream(streamId)

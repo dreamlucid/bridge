@@ -71,14 +71,16 @@ class FFmpegClient {
       )
     }
 
-    // SRT input options for better reliability
+    // SRT input options for minimal end-to-end delay (server and client on same machine)
+    // Equivalent to ffplay: -fflags nobuffer -flags low_delay -analyzeduration 0 -probesize 32
+    // -re is omitted so we read as fast as the stream delivers (no artificial throttling)
     args.push(
-      '-fflags', '+genpts', // Generate presentation timestamps
-      '-flags', '+low_delay', // Low latency mode
+      '-fflags', '+nobuffer', // Minimize input buffering (same as ffplay -fflags nobuffer)
+      '-flags', '+low_delay', // Low latency demux/decoder
+      '-analyzeduration', '0', // No demux analysis delay (start immediately)
+      '-probesize', '32', // Minimal probe so decoding starts ASAP
       '-strict', 'experimental',
-      '-re', // Read input at native frame rate (for live streams)
       '-v', 'info',
-      // SRT connection timeout and retry settings
       '-timeout', '5000000', // 5 second timeout in microseconds
       '-i', srtUrl
     )

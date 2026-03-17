@@ -43,11 +43,12 @@ async function getStreamConfig (streamId) {
  * Sync stream manager with state
  */
 async function syncStreamManagerWithState () {
-  const streams = await bridge.state.get(paths.STATE_STREAMS_PATH) || { inputs: [], outputs: [] }
+  const streams = await bridge.state.get(paths.STATE_STREAMS_PATH) || { inputs: [], outputs: [], channelPreviews: [] }
 
   // Clear current streams
   streamManager.inputStreams.clear()
   streamManager.outputStreams.clear()
+  streamManager.channelPreviews.clear()
 
   // Rebuild from state
   if (streams.inputs) {
@@ -59,6 +60,12 @@ async function syncStreamManagerWithState () {
   if (streams.outputs) {
     streams.outputs.forEach(stream => {
       streamManager.outputStreams.set(stream.id, stream)
+    })
+  }
+
+  if (streams.channelPreviews && Array.isArray(streams.channelPreviews)) {
+    streams.channelPreviews.forEach(entry => {
+      streamManager.channelPreviews.set(entry.channelKey, entry)
     })
   }
 }

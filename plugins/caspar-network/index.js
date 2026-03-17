@@ -66,7 +66,24 @@ async function initSettings () {
             audio: false
           },
           previewEnabled: true,
-          previewQuality: 'medium'
+          previewQuality: 'medium',
+          // Dedicated preview SRT: default port and encoding (not tied to output streams)
+          previewDefaultPort: 6010,
+          previewDefaultSrtParams: 'mode=listener&latency=2000&transtype=live',
+          previewEncodingOptions: {
+            format: 'mpegts',
+            codec: 'h264_nvenc',
+            preset: 'p4',
+            tune: 'll',
+            bitrate: '2500k',
+            maxrate: '2500k',
+            bufsize: '5000k',
+            gop: 50,
+            keyintMin: 50,
+            audio: false
+          },
+          // Reserved stream index for preview (avoids clash with user output indices 0, 500, etc.)
+          previewStreamIndex: 999
         }
       }
     }
@@ -87,7 +104,8 @@ async function initStreams () {
       [manifest.name]: {
         streams: {
           inputs: [],
-          outputs: []
+          outputs: [],
+          channelPreviews: []
         }
       }
     }

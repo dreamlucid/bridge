@@ -4,96 +4,164 @@ import bridge from 'bridge'
 import { SharedContext } from '../sharedContext'
 import { StreamPreview as StreamPreviewComponent } from '../components/StreamPreview'
 
+/**
+ * Stream Preview view: one preview per channel.
+ * Preview uses a dedicated SRT port and is tracked separately from output streams (outputs are for third-party encoders).
+ * Channels are listed from input streams; each has a Start/Stop Preview button.
+ */
 export const StreamPreview = () => {
   const [state] = React.useContext(SharedContext)
-  const [streams, setStreams] = React.useState([])
-  const [selectedStreamId, setSelectedStreamId] = React.useState(null)
+  const [channels, setChannels] = React.useState([])
+  const [activePreviews, setActivePreviews] = React.useState([])
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState(null)
 
   const pluginName = window.PLUGIN?.name || 'bridge-plugin-caspar-network'
 
-  // Load streams (only output streams for preview)
+  // Load previewable channels (unique serverId+channel from input streams) and active channel previews
   React.useEffect(() => {
-    async function loadStreams () {
+    async function load () {
       try {
-        const streamList = await bridge.commands.executeCommand('caspar-network.listStreams')
-        // Only show output streams for preview (input streams don't have preview)
-        const outputStreams = (streamList?.outputs || []).map(s => ({ ...s, type: 'output' }))
-        setStreams(outputStreams)
-        // Preview will only start when user explicitly selects a stream from the dropdown
+        setLoading(true)
+        setError(null)
+        const [channelList, previewList] = await Promise.all([
+          bridge.commands.executeCommand('caspar-network.listPreviewableChannels'),
+          bridge.commands.executeCommand('caspar-network.listChannelPreviews')
+        ])
+        setChannels(channelList || [])
+        setActivePreviews(previewList || [])
       } catch (err) {
-        console.error('Error loading streams:', err)
+        console.error('Error loading preview data:', err)
+        setError(err.message || 'Failed to load')
+      } finally {
+        setLoading(false)
       }
     }
-    loadStreams()
+    load()
+  }, [])
 
-    // Listen for state changes
-    const streamsData = state?.plugins?.[pluginName]?.streams
-    if (streamsData) {
-      // Only show output streams for preview (input streams don't have preview)
-      const outputStreams = (streamsData.outputs || []).map(s => ({ ...s, type: 'output' }))
-      setStreams(outputStreams)
+  // Sync active previews from shared state
+  React.useEffect(() => {
+    const channelPreviews = state?.plugins?.[pluginName]?.streams?.channelPreviews
+    if (Array.isArray(channelPreviews)) {
+      setActivePreviews(channelPreviews)
     }
-  }, [state, pluginName, selectedStreamId])
+  }, [state, pluginName])
 
-  const selectedStream = streams.find(s => s.id === selectedStreamId)
-  const activeStreams = streams.filter(s => s.status === 'active')
+  async function handleStartPreview (serverId, channel) {
+    try {
+      await bridge.commands.executeCommand('caspar-network.startChannelPreview', serverId, channel)
+      const list = await bridge.commands.executeCommand('caspar-network.listChannelPreviews')
+      setActivePreviews(list || [])
+    } catch (err) {
+      console.error('Error starting preview:', err)
+    }
+  }
+
+  async function handleStopPreview (serverId, channel) {
+    try {
+      await bridge.commands.executeCommand('caspar-network.stopChannelPreview', serverId, channel)
+      const list = await bridge.commands.executeCommand('caspar-network.listChannelPreviews')
+      setActivePreviews(list || [])
+    } catch (err) {
+      console.error('Error stopping preview:', err)
+    }
+  }
+
+  function isPreviewActive (serverId, channel) {
+    return activePreviews.some(p => p.serverId === serverId && p.channel === channel)
+  }
+
+  if (loading) {
+    return (
+      <div className='StreamManager u-scroll--y'>
+        <div className='StreamManager-content'>
+          <div className='StreamManager-header'>
+            <h1 className='StreamManager-title'>Stream Preview</h1>
+          </div>
+          <div className='StreamList-item' style={{ padding: '12px' }}>
+            <div style={{ color: 'var(--base-color--grey1)' }}>Loading...</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className='StreamManager u-scroll--y'>
+        <div className='StreamManager-content'>
+          <div className='StreamManager-header'>
+            <h1 className='StreamManager-title'>Stream Preview</h1>
+          </div>
+          <div className='StreamList-item' style={{ padding: '12px', color: 'var(--base-color--error)' }}>
+            {error}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className='StreamManager u-scroll--y'>
       <div className='StreamManager-content'>
         <div className='StreamManager-header'>
           <h1 className='StreamManager-title'>Stream Preview</h1>
+          <p className='StreamManager-description' style={{ fontSize: '12px', color: 'var(--base-color--grey1)', marginTop: '4px' }}>
+            One preview per channel on a dedicated SRT port (not the output streams). Start/stop with the button below.
+          </p>
         </div>
 
-        <div className='StreamForm'>
-          <div className='StreamForm-field'>
-            <label className='StreamForm-label'>Select Stream</label>
-            <select
-              className='StreamForm-input'
-              value={selectedStreamId || ''}
-              onChange={e => setSelectedStreamId(e.target.value || null)}
-            >
-              <option value=''>Select a stream...</option>
-              {activeStreams.map(stream => (
-                <option key={stream.id} value={stream.id}>
-                  Output: Channel {stream.channel}, Stream {stream.streamIndex || 'N/A'}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {selectedStream && selectedStream.status === 'active'
+        {channels.length === 0
           ? (
               <div className='StreamList-item' style={{ padding: '12px' }}>
-                <div className='StreamList-item-header'>
-                  <div className='StreamList-item-title'>
-                    Output: Channel {selectedStream.channel}, Stream {selectedStream.streamIndex || 'N/A'}
-                  </div>
-                  <div className={'StreamList-item-status StreamList-item-status--active'}>
-                    ACTIVE
-                  </div>
-                </div>
-                <div className='StreamList-item-preview' style={{ marginTop: '12px' }}>
-                  <StreamPreviewComponent streamId={selectedStream.id} />
+                <div style={{ color: 'var(--base-color--grey1)', fontSize: '12px' }}>
+                  No channels available. Add an input stream to see channels for preview.
                 </div>
               </div>
             )
-          : selectedStreamId
-            ? (
-                <div className='StreamList-item' style={{ padding: '12px' }}>
-                  <div style={{ color: 'var(--base-color--grey1)', fontSize: '12px' }}>
-                    Stream is not active. Please start the stream to preview it.
-                  </div>
-                </div>
-              )
-            : (
-                <div className='StreamList-item' style={{ padding: '12px' }}>
-                  <div style={{ color: 'var(--base-color--grey1)', fontSize: '12px' }}>
-                    No stream selected. Select an active stream from the dropdown above.
-                  </div>
-                </div>
-              )}
+          : (
+              <div className='StreamList'>
+                {channels.map(({ serverId, channel }) => {
+                  const active = isPreviewActive(serverId, channel)
+                  return (
+                    <div key={`${serverId}-${channel}`} className='StreamList-item' style={{ padding: '12px' }}>
+                      <div className='StreamList-item-header' style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                        <div className='StreamList-item-title'>
+                          Channel: {serverId} / {channel}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {active
+                            ? (
+                                <button
+                                  type='button'
+                                  className='StreamForm-button StreamForm-button--danger'
+                                  onClick={() => handleStopPreview(serverId, channel)}
+                                >
+                                  Stop Preview
+                                </button>
+                              )
+                            : (
+                                <button
+                                  type='button'
+                                  className='StreamForm-button StreamForm-button--primary'
+                                  onClick={() => handleStartPreview(serverId, channel)}
+                                >
+                                  Start Preview
+                                </button>
+                              )}
+                        </div>
+                      </div>
+                      {active && (
+                        <div className='StreamList-item-preview' style={{ marginTop: '12px' }}>
+                          <StreamPreviewComponent serverId={serverId} channel={channel} />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
       </div>
     </div>
   )
