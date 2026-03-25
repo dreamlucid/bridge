@@ -10,7 +10,43 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   margin-bottom: 20px;
+}
+
+.WorkspaceManager-headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.WorkspaceManager-fileInput {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.WorkspaceManager-import {
+  padding: 8px 14px;
+  border: 1px solid var(--base-color--shade);
+  border-radius: 7px;
+  background: var(--base-color--background);
+  color: var(--base-color);
+  cursor: pointer;
+  font-size: 0.9em;
+  font-family: var(--base-fontFamily--primary);
+}
+
+.WorkspaceManager-import:hover:not(:disabled) {
+  background: var(--base-color--shade);
+  opacity: 0.9;
+}
+
+.WorkspaceManager-import:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .WorkspaceManager-header h1 {
@@ -114,6 +150,19 @@
 .WorkspaceManager-itemAction:hover {
   background: var(--base-color--shade);
   opacity: 0.7;
+}
+
+.WorkspaceManager-itemDelete {
+  width: auto;
+  min-width: 32px;
+  padding: 0 8px;
+  font-size: 0.75em;
+  font-family: var(--base-fontFamily--primary);
+  color: var(--base-color--error, #c62828);
+}
+
+.WorkspaceManager-itemDelete:hover {
+  opacity: 1;
 }
 
 .WorkspaceManager-rename {

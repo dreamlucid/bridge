@@ -10,6 +10,8 @@ export function WorkspaceManager ({ open, onClose = () => {} }) {
   const [renamingId, setRenamingId] = React.useState(null)
   const [renameValue, setRenameValue] = React.useState('')
   const [error, setError] = React.useState(null)
+  const [importing, setImporting] = React.useState(false)
+  const fileInputRef = React.useRef(null)
 
   // Load workspaces when modal opens
   React.useEffect(() => {
@@ -19,8 +21,11 @@ export function WorkspaceManager ({ open, onClose = () => {} }) {
     loadWorkspaces()
   }, [open])
 
-  async function loadWorkspaces () {
-    setLoading(true)
+  async function loadWorkspaces (opts = {}) {
+    const { silent } = opts
+    if (!silent) {
+      setLoading(true)
+    }
     setError(null)
     try {
       const bridge = await api.load()
@@ -30,7 +35,9 @@ export function WorkspaceManager ({ open, onClose = () => {} }) {
       setError(err.message || 'Failed to load workspaces')
       console.error('Failed to load workspaces:', err)
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }
 
@@ -42,6 +49,51 @@ export function WorkspaceManager ({ open, onClose = () => {} }) {
     } catch (err) {
       setError(err.message || 'Failed to open workspace')
       console.error('Failed to open workspace:', err)
+    }
+  }
+
+  async function handleImportFile (e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) {
+      return
+    }
+    setImporting(true)
+    setError(null)
+    try {
+      const bridge = await api.load()
+      const result = await bridge.workspace.upload(file)
+      await loadWorkspaces({ silent: true })
+      bridge.messages.createTextMessage({
+        text: `Imported workspace: ${result.title || result.filename}`,
+        duration: 2500
+      })
+    } catch (err) {
+      setError(err.message || 'Failed to import workspace')
+      console.error('Failed to import workspace:', err)
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function handleDeleteWorkspace (workspace, e) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!window.confirm(`Remove "${workspace.title}" from saved workspaces? This cannot be undone.`)) {
+      return
+    }
+    setError(null)
+    try {
+      const bridge = await api.load()
+      await bridge.workspace.remove(workspace.filePath)
+      await loadWorkspaces({ silent: true })
+      bridge.messages.createTextMessage({
+        text: `Removed ${workspace.title}`,
+        duration: 2000
+      })
+    } catch (err) {
+      setError(err.message || 'Failed to remove workspace')
+      console.error('Failed to remove workspace:', err)
     }
   }
 
@@ -105,9 +157,27 @@ export function WorkspaceManager ({ open, onClose = () => {} }) {
       <div className='WorkspaceManager'>
         <div className='WorkspaceManager-header'>
           <h1>Workspaces</h1>
-          <button className='WorkspaceManager-close' onClick={onClose}>
-            <Icon name='close' />
-          </button>
+          <div className='WorkspaceManager-headerActions'>
+            <input
+              ref={fileInputRef}
+              type='file'
+              accept='.bridge'
+              className='WorkspaceManager-fileInput'
+              onChange={handleImportFile}
+            />
+            <button
+              type='button'
+              className='WorkspaceManager-import'
+              disabled={loading || importing}
+              onClick={() => fileInputRef.current?.click()}
+              title='Import a .bridge file'
+            >
+              Import…
+            </button>
+            <button type='button' className='WorkspaceManager-close' onClick={onClose}>
+              <Icon name='close' />
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -172,11 +242,23 @@ export function WorkspaceManager ({ open, onClose = () => {} }) {
                                   </div>
                                 </div>
                                 <button
+                                  type='button'
                                   className='WorkspaceManager-itemAction'
-                                  onClick={() => startRename(workspace)}
-                                  title='Rename workspace'
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    startRename(workspace)
+                                  }}
+                                  title='Rename workspace (applies to the workspace you have open)'
                                 >
                                   <Icon name='edit' />
+                                </button>
+                                <button
+                                  type='button'
+                                  className='WorkspaceManager-itemAction WorkspaceManager-itemDelete'
+                                  onClick={(e) => handleDeleteWorkspace(workspace, e)}
+                                  title='Remove from disk'
+                                >
+                                  Remove
                                 </button>
                               </>
                             )}
