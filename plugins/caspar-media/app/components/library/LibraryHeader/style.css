@@ -1,0 +1,38 @@
+.LibraryHeader {
+  border-bottom: 1px solid var(--base-color--shade);
+}
+
+.LibraryHeader-serverSelector {
+  width: 100%;
+  padding: 0 5px 5px;
+  box-sizing: border-box;
+}
+
+.LibraryHeader-refresh {
+  margin: 0 5px 5px;
+}
+
+@media screen and (min-width: 350px) {
+  .LibraryHeader {
+    display: flex;
+    align-items: center;
+  }
+
+  .LibraryHeader-serverSelector {
+    width: 45%;
+  }
+
+  .LibraryHeader-refresh {
+    margin: 0 5px 5px 0;
+  }
+}
+
+.LibraryHeader-search {
+  width: 100%;
+  padding: 0 5px 5px;
+  box-sizing: border-box;
+}
+
+.LibraryHeader-search input {
+  width: 100%;
+}

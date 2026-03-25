@@ -1,0 +1,69 @@
+.MediaUpload {
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  max-width: 36rem;
+}
+
+.MediaUpload-field {
+  margin-bottom: 0.75rem;
+}
+
+.MediaUpload-field label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.MediaUpload-field input[type="text"],
+.MediaUpload-field select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.MediaUpload-drop {
+  border: 2px dashed rgba(128, 128, 128, 0.5);
+  border-radius: 4px;
+  padding: 1.5rem;
+  text-align: center;
+  margin-top: 0.5rem;
+  cursor: pointer;
+}
+
+.MediaUpload-drop.MediaUpload-dropActive {
+  border-color: rgba(80, 120, 200, 0.9);
+  background: rgba(80, 120, 200, 0.08);
+}
+
+.MediaUpload-msg {
+  margin-top: 0.5rem;
+  white-space: pre-wrap;
+}
+
+.MediaUpload-msg--error {
+  color: #c62828;
+}
+
+.MediaUpload-msg--ok {
+  color: #2e7d32;
+}
+
+.MediaUpload-progress {
+  width: 100%;
+  height: 0.5rem;
+}
+
+.MediaUpload-progressMeta {
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+  opacity: 0.85;
+}
+
+.MediaUpload-chunkActions {
+  margin-top: 0.5rem;
+}
+
+.MediaUpload-hint {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin-top: 0.5rem;
+}

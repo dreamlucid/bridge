@@ -1,0 +1,16 @@
+.ServerSelector {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ServerSelector select {
+  width: 100%;
+}
+
+.ServerSelector-noServers {
+  padding: 0.5em 0;
+  width: 100%;
+  text-align: center;
+
+  opacity: 0.5;
+}
