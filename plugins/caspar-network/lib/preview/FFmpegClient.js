@@ -19,14 +19,14 @@ class FFmpegClient {
   /**
    * Send SRT stream to mediasoup PlainTransport via RTP (video only)
    * Following broadcaster demo pattern: creates producers first, then sends RTP
-   * Uses hardware acceleration (NVDEC/NVENC) when available, falls back to software
+   * Encode with NVIDIA NVENC always. Optional CUDA decode (NVDEC) when useHardware is true.
    * @param {Object} options
    * @param {string} options.streamId - Stream ID
    * @param {string} options.srtUrl - SRT input URL
    * @param {Object} options.videoTransport - Video PlainTransport info { ip, port, rtcpPort }
    * @param {number} options.videoSsrc - Video SSRC
    * @param {number} options.videoPt - Video payload type
-   * @param {boolean} options.useHardware - Use hardware acceleration (default: true)
+   * @param {boolean} options.useHardware - Request CUDA hardware decode before -i (default: true). Encode stays NVENC.
    * @returns {Promise<void>}
    */
   async sendSRTStream ({
@@ -55,20 +55,16 @@ class FFmpegClient {
       useHardware
     })
 
-    // Build FFmpeg command for video-only RTP stream
-    // Use hardware acceleration (NVDEC/NVENC) when available
+    // Build FFmpeg command for video-only RTP stream (encode: always h264_nvenc)
     const cmd = 'ffmpeg'
     const args = []
 
     // Hardware acceleration options MUST come BEFORE the input (-i) option
     if (useHardware) {
-      // Use NVDEC (NVIDIA hardware decoder) for decoding
-      // Note: We use hwaccel cuda for decoding, but let FFmpeg handle format conversion
-      // to avoid filter chain issues. NVENC can work with both CUDA and system memory frames.
-      args.push(
-        '-hwaccel', 'cuda', // Use CUDA hardware acceleration for decoding
-        '-hwaccel_output_format', 'nv12' // Convert to NV12 (NVENC-compatible format)
-      )
+      // CUDA decode only — do not pin -hwaccel_output_format to nv12/cuda, or decoded frames
+      // stay on-GPU and break -vf scale (and hwdownload fails when FFmpeg uses sw decode
+      // "h264 (native)", which still happens with -hwaccel cuda in some streams/setups).
+      args.push('-hwaccel', 'cuda')
     }
 
     // SRT input options for minimal end-to-end delay (server and client on same machine)
@@ -88,32 +84,25 @@ class FFmpegClient {
     // Map video stream
     args.push('-map', '0:v:0')
 
-    // Video encoding: Use NVENC if hardware is enabled, otherwise copy or use software
+    // Preview: 360p height (required — NVENC always re-encodes, never stream copy)
+    args.push('-vf', 'scale=-2:360')
+
+    // Video encoding: always NVIDIA NVENC (no -c:v copy fallback)
     // IMPORTANT: RTP parameters must match the producer's RTP parameters exactly
     // Producer expects: packetization-mode=1, profile-level-id=42e01f (Baseline profile, Level 3.1)
-    if (useHardware) {
-      // Use NVENC for hardware encoding with low latency settings
-      // When using -hwaccel cuda, FFmpeg will automatically convert CUDA frames for NVENC
-      // Force Baseline profile to match producer RTP parameters
-      // Note: NVENC doesn't support -level parameter directly, it auto-detects based on resolution/bitrate
-      args.push(
-        '-c:v', 'h264_nvenc', // NVIDIA hardware H.264 encoder
-        '-preset', 'p4', // Medium quality preset (p1-p7, p1=fastest, p7=slowest)
-        '-tune', 'll', // Low latency tuning
-        '-rc', 'vbr', // Variable bitrate
-        '-b:v', '6000k', // Video bitrate
-        '-maxrate', '6000k', // Maximum bitrate
-        '-bufsize', '12000k', // Buffer size
-        '-g', '50', // GOP size
-        '-keyint_min', '50', // Minimum keyframe interval
-        '-profile:v', 'baseline' // Baseline profile (matches producer: profile-level-id=42e01f)
-        // Note: Level is auto-detected by NVENC based on resolution/bitrate
-        // Note: packetization-mode=1 is set via RTP muxer, not encoder
-      )
-    } else {
-      // Fallback: copy codec (assumes H.264 from SRT stream)
-      args.push('-c:v', 'copy')
-    }
+    // ~800k VBR suits 360p preview
+    args.push(
+      '-c:v', 'h264_nvenc',
+      '-preset', 'p4', // Medium quality preset (p1-p7, p1=fastest, p7=slowest)
+      '-tune', 'll', // Low latency tuning
+      '-rc', 'vbr', // Variable bitrate
+      '-b:v', '800k',
+      '-maxrate', '800k',
+      '-bufsize', '1600k', // ~2× maxrate
+      '-g', '50',
+      '-keyint_min', '50',
+      '-profile:v', 'baseline' // matches producer: profile-level-id=42e01f
+    )
 
     // Use tee muxer to send video to RTP endpoint with specific SSRC and payload type
     // Add RTP-specific options to ensure proper packetization

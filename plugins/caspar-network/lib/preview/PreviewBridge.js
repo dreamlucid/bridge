@@ -487,7 +487,7 @@ class PreviewBridge {
         },
         videoSsrc,
         videoPt,
-        useHardware: true // Enable hardware acceleration
+        useHardware: true // CUDA decode (NVDEC); encode is always NVENC in FFmpegClient
       })
 
       // Wait for FFmpeg to actually send data (or timeout); avoids unhandled rejection
