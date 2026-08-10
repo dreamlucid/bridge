@@ -121,7 +121,13 @@ async function startChannelPreview (serverId, channel) {
 
   // Already fully active: return existing signaling path (no ADD STREAM)
   if (existing && existing.status === 'active' && webRTCPreviewManager.isPreviewActive(channelKey)) {
-    const path = `/api/v1/webrtc?streamId=${encodeURIComponent(channelKey)}`
+    let path = `/api/v1/webrtc?streamId=${encodeURIComponent(channelKey)}`
+    try {
+      const state = await bridge.state.get()
+      if (state?._id) {
+        path += `&workspace=${encodeURIComponent(state._id)}`
+      }
+    } catch (_) { /* ignore */ }
     logger.debug('Channel preview already active', { channelKey })
     return path
   }
